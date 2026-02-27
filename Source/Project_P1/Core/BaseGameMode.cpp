@@ -3,5 +3,5 @@
 
 ABaseGameMode::ABaseGameMode()
 {
-	DefaultPawnClass = APlayerCharacter::StaticClass();
+	// DefaultPawnClass = APlayerCharacter::StaticClass();
 }

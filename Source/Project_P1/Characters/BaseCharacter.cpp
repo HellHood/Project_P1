@@ -2,6 +2,7 @@
 
 #include "GameFramework/CharacterMovementComponent.h"
 
+
 ABaseCharacter::ABaseCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -14,6 +15,21 @@ ABaseCharacter::ABaseCharacter()
 	// Pozwalamy CharacterMovement obracać postać względem kierunku ruchu
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 	GetCharacterMovement()->RotationRate = FRotator(0.f, 720.f, 0.f);
+	
+	// Zmienne
+	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
+	if (MoveComp)
+	{
+		MoveComp->MaxWalkSpeed = 650.f;
+		MoveComp->MaxAcceleration = 4096.f;
+		MoveComp->BrakingDecelerationWalking = 4096.f;
+		MoveComp->GroundFriction = 8.f;
+		MoveComp->BrakingFrictionFactor = 2.f;
+		
+		MoveComp->AirControl = 0.45f;
+		MoveComp->GravityScale = 1.2f;
+		MoveComp->JumpZVelocity = 650.f;		
+	}
 }
 
 void ABaseCharacter::BeginPlay()
