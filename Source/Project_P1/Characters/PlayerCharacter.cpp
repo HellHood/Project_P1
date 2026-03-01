@@ -8,7 +8,10 @@
 #include "HAL/IConsoleManager.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "Kismet/GameplayStatics.h"
+#include "GameFramework/DamageType.h"
 #include "GameFramework/PlayerController.h"
+#include "Project_P1/Components/HealthComponent.h"
 
 static int32 GMovementDebug = 0;
 static FAutoConsoleVariableRef CVarMovementDebug(
@@ -63,7 +66,18 @@ APlayerCharacter::APlayerCharacter()
 void APlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	if (UHealthComponent* HC = GetHealthComponent())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[HealthTest] Before: %.1f / %.1f"), HC->GetHealth(), HC->GetMaxHealth());
 
+		HC->ApplyDamage(25.f, this);
+
+		UE_LOG(LogTemp, Warning, TEXT("[HealthTest] After:  %.1f / %.1f"), HC->GetHealth(), HC->GetMaxHealth());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("[HealthTest] No HealthComponent on %s"), *GetName());
+	}
 	// Add mapping context for the local player
 	if (APlayerController* PC = Cast<APlayerController>(Controller))
 	{
@@ -140,7 +154,7 @@ void APlayerCharacter::Move(const FInputActionValue& Value)
 void APlayerCharacter::Look(const FInputActionValue& Value)
 {
 	const FVector2D V = Value.Get<FVector2D>();
-	UE_LOG(LogTemp, Warning, TEXT("Look V: X=%f Y=%f"), V.X, V.Y);
+	// UE_LOG(LogTemp, Warning, TEXT("Look V: X=%f Y=%f"), V.X, V.Y);
 
 	AddControllerYawInput(V.X);
 	AddControllerPitchInput(V.Y);

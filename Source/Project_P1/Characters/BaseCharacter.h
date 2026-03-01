@@ -6,6 +6,8 @@
 #include "GameFramework/Character.h"
 #include "BaseCharacter.generated.h"
 
+class UHealthComponent;
+
 UCLASS()
 class PROJECT_P1_API ABaseCharacter : public ACharacter
 {
@@ -14,10 +16,16 @@ class PROJECT_P1_API ABaseCharacter : public ACharacter
 public:
 	// Sets default values for this character's properties
 	ABaseCharacter();
+	
+	UFUNCTION(BlueprintPure, Category="Systems|Health")
+	UHealthComponent* GetHealthComponent() const { return HealthComponent; }
 
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Systems")
+	UHealthComponent* HealthComponent;
 
 public:	
 	// Called every frame

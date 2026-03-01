@@ -1,12 +1,13 @@
 #include "BaseCharacter.h"
-
+#include "../Components/HealthComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
 
 ABaseCharacter::ABaseCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
-
+	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
+	
 	// Wyłączamy automatyczne obracanie względem kontrolera
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
