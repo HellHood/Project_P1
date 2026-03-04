@@ -1,9 +1,12 @@
 #include "EnemyCharacter.h"
 
 #include "AIController.h"
+#include "NavigationSystem.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/DamageType.h"
 #include "TimerManager.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Project_P1/Components/HealthComponent.h"
 
 AEnemyCharacter::AEnemyCharacter()
 {
@@ -22,11 +25,20 @@ void AEnemyCharacter::BeginPlay()
 
 	// v0: first player pawn
 	TargetPawn = UGameplayStatics::GetPlayerPawn(this, 0);
+	GetWorldTimerManager().SetTimer(RepathHandle, this, &AEnemyCharacter::RepathTick, RepathInterval, true);
 }
 
 void AEnemyCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	
+	if (UHealthComponent* HC = GetHealthComponent())
+	{
+		if (HC->IsDead())
+		{
+			return;
+		}
+	}
 
 	if (!IsTargetValid())
 	{
@@ -35,12 +47,7 @@ void AEnemyCharacter::Tick(float DeltaSeconds)
 	}
 
 	const float Dist = DistanceToTarget2D();
-
-	// Chase if in range
-	if (Dist <= ChaseRange)
-	{
-		ChaseTarget();
-	}
+	
 
 	// Attack if close enough
 	if (Dist <= AttackRange)
@@ -57,7 +64,7 @@ void AEnemyCharacter::Tick(float DeltaSeconds)
 
 bool AEnemyCharacter::IsTargetValid() const
 {
-	return TargetPawn && !TargetPawn->IsPendingKill();
+	return IsValid(TargetPawn);
 }
 
 float AEnemyCharacter::DistanceToTarget2D() const
@@ -81,7 +88,8 @@ void AEnemyCharacter::ChaseTarget()
 void AEnemyCharacter::TryAttackTarget()
 {
 	if (bAttackOnCooldown) return;
-
+	if (!HasLineOfSightToTarget()) return;
+	
 	// Start cooldown immediately so we don't multi-hit same frame
 	bAttackOnCooldown = true;
 	GetWorldTimerManager().SetTimer(
@@ -112,4 +120,35 @@ void AEnemyCharacter::ResetAttackCooldown()
 {
 	bAttackOnCooldown = false;
 	GetWorldTimerManager().ClearTimer(AttackCooldownHandle);
+}
+
+void AEnemyCharacter::RepathTick()
+{
+	if (!IsTargetValid()) return;
+
+	// Dead guard (important when you stop destroying enemies on death)
+	if (UHealthComponent* HC = GetHealthComponent(); HC && HC->IsDead()) return;
+
+	const float Dist = DistanceToTarget2D();
+	if (Dist <= ChaseRange)
+	{
+		ChaseTarget();
+	}
+}
+
+bool AEnemyCharacter::HasLineOfSightToTarget() const
+{
+	if (!IsTargetValid()) return false;
+
+	FHitResult Hit;
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(this);
+
+	const FVector Start = GetActorLocation() + FVector(0,0,50);
+	const FVector End   = TargetPawn->GetActorLocation() + FVector(0,0,50);
+
+	const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params);
+
+	// If nothing hit, LOS is clear. If hit, must be the target.
+	return !bHit || Hit.GetActor() == TargetPawn;
 }

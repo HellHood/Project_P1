@@ -36,6 +36,12 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Enemy|Debug")
 	bool bDebugEnemy = false;
+	
+	UPROPERTY(EditDefaultsOnly, Category="Enemy|AI")
+	float RepathInterval = 0.2f;
+
+
+
 
 private:
 	// Cached target (player pawn)
@@ -44,6 +50,8 @@ private:
 
 	bool bAttackOnCooldown = false;
 	FTimerHandle AttackCooldownHandle;
+	
+	FTimerHandle RepathHandle;
 
 	void ResetAttackCooldown();
 
@@ -51,4 +59,6 @@ private:
 	float DistanceToTarget2D() const;
 	void ChaseTarget();
 	void TryAttackTarget();
+	void RepathTick();
+	bool HasLineOfSightToTarget() const;
 };
