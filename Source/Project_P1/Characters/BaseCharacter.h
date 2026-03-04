@@ -7,6 +7,7 @@
 #include "BaseCharacter.generated.h"
 
 class UHealthComponent;
+class UCombatComponent;
 
 UCLASS()
 class PROJECT_P1_API ABaseCharacter : public ACharacter
@@ -19,6 +20,9 @@ public:
 	
 	UFUNCTION(BlueprintPure, Category="Systems|Health")
 	UHealthComponent* GetHealthComponent() const { return HealthComponent; }
+	
+	UFUNCTION(BlueprintPure, Category="Systems|Combat")
+	UCombatComponent* GetCombatComponent() const { return CombatComponent; }
 
 protected:
 	// Called when the game starts or when spawned
@@ -26,6 +30,9 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Systems")
 	UHealthComponent* HealthComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="System")
+	UCombatComponent* CombatComponent;
 
 public:	
 	// Called every frame

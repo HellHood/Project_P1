@@ -64,6 +64,7 @@ void UHealthComponent::HandleTakeAnyDamage(
 
 	AActor* InstigatorActor = DamageCauser;
 	SetHealth(Health - Damage, -Damage, InstigatorActor);
+	UE_LOG(LogTemp, Warning, TEXT("[Health] Took %.1f damage. New=%.1f"), Damage, Health);
 }
 
 void UHealthComponent::SetHealth(float NewHealth, float Delta, AActor* InstigatorActor)
@@ -85,5 +86,14 @@ void UHealthComponent::SetHealth(float NewHealth, float Delta, AActor* Instigato
 	{
 		bHasDied = true;
 		OnDeath.Broadcast(this, InstigatorActor);
+
+		if (bDestroyOwnerOnDeath)
+		{
+			if (AActor* Owner = GetOwner())
+			{
+				Owner->SetActorEnableCollision(false);
+				Owner->Destroy();
+			}
+		}
 	}
 }

@@ -60,6 +60,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input")
 	UInputAction* JumpAction;
 	
+	// Attack
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input")
+	UInputAction* LightAttackAction;
 	
 	// ===== Public API =====
 	UFUNCTION(BlueprintCallable, Category="Dash")
@@ -76,6 +79,7 @@ protected:
 	void Look(const FInputActionValue& Value);
 	void OnJumpPressed();
 	void OnJumpReleased();
+	void StartLightAttack();
 	
 private:
 	virtual void Tick(float DeltaSeconds) override;

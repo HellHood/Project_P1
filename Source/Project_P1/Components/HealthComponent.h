@@ -70,6 +70,11 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	
+	// If true, owning actor is destroyed when health reaches 0.
+	// Useful for simple dummies and prototyping.
+	UPROPERTY(EditDefaultsOnly, Category="Health|Death")
+	bool bDestroyOwnerOnDeath = false;
 
 	// Max HP (tuning)
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Health", meta=(ClampMin="1.0"))

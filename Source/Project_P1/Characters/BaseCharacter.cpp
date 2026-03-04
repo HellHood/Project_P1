@@ -1,4 +1,5 @@
 #include "BaseCharacter.h"
+#include "../Components/CombatComponent.h"
 #include "../Components/HealthComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
@@ -7,6 +8,7 @@ ABaseCharacter::ABaseCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
+	CombatComponent = CreateDefaultSubobject<UCombatComponent>(TEXT("CombatComponent"));
 	
 	// Wyłączamy automatyczne obracanie względem kontrolera
 	bUseControllerRotationPitch = false;

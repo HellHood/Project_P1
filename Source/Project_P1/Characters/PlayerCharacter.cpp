@@ -4,11 +4,13 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "../Components/CombatComponent.h"
 #include "TimerManager.h"
 #include "HAL/IConsoleManager.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Kismet/GameplayStatics.h"
+#include "DrawDebugHelpers.h"
 #include "GameFramework/DamageType.h"
 #include "GameFramework/PlayerController.h"
 #include "Project_P1/Components/HealthComponent.h"
@@ -126,6 +128,14 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 		}
 			else
 			UE_LOG(LogTemp, Warning, TEXT("JumpAction is NOT set on %s"), *GetName());
+		if (LightAttackAction)
+		{
+			EIC->BindAction(LightAttackAction, ETriggerEvent::Started, this, &APlayerCharacter::StartLightAttack);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("LightAttackAction is NOT set on %s"), *GetName());
+		}
 	}
 	else
 	{
@@ -292,4 +302,12 @@ void APlayerCharacter::OnJumpPressed()
 void APlayerCharacter::OnJumpReleased()
 {
 	StopJumping();
+}
+
+void APlayerCharacter::StartLightAttack()
+{
+	if (UCombatComponent* CC = GetCombatComponent())
+	{
+		CC->TryLightAttack();
+	}
 }
