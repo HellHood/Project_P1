@@ -74,6 +74,10 @@ protected:
 	UFUNCTION(BlueprintCallable, Category="Dash")
 	bool CanDash() const;
 	
+	// ===== Death Handler =====
+	UFUNCTION()
+	void HandlePlayerDeath(UHealthComponent* HealthComp, AActor* InstigatorActor);
+	
 	// ===== Input handlers =====
 	void Move(const FInputActionValue& Value);
 	void Look(const FInputActionValue& Value);

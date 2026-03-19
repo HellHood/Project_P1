@@ -5,6 +5,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "../Components/CombatComponent.h"
+#include "../Core/BaseGameMode.h"
 #include "TimerManager.h"
 #include "HAL/IConsoleManager.h"
 #include "EnhancedInputComponent.h"
@@ -68,18 +69,7 @@ APlayerCharacter::APlayerCharacter()
 void APlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	if (UHealthComponent* HC = GetHealthComponent())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[HealthTest] Before: %.1f / %.1f"), HC->GetHealth(), HC->GetMaxHealth());
 
-		HC->ApplyDamage(25.f, this);
-
-		UE_LOG(LogTemp, Warning, TEXT("[HealthTest] After:  %.1f / %.1f"), HC->GetHealth(), HC->GetMaxHealth());
-	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("[HealthTest] No HealthComponent on %s"), *GetName());
-	}
 	// Add mapping context for the local player
 	if (APlayerController* PC = Cast<APlayerController>(Controller))
 	{
@@ -98,6 +88,15 @@ void APlayerCharacter::BeginPlay()
 				}
 			}
 		}
+	}
+	
+	if (UHealthComponent* HC = GetHealthComponent())
+	{
+		HC->OnDeath.AddDynamic(this, &APlayerCharacter::HandlePlayerDeath);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("No HealthComponent on %s"), *GetName());
 	}
 }
 
@@ -309,5 +308,34 @@ void APlayerCharacter::StartLightAttack()
 	if (UCombatComponent* CC = GetCombatComponent())
 	{
 		CC->TryLightAttack();
+	}
+}
+
+void APlayerCharacter::HandlePlayerDeath(UHealthComponent* HealthComp, AActor* InstigatorActor)
+{
+	UE_LOG(LogTemp, Warning, TEXT("[Player] Died. Instigator: %s"),
+		InstigatorActor ? *InstigatorActor->GetName() : TEXT("None"));
+
+	// Stop player input after death.
+	if (APlayerController* PC = Cast<APlayerController>(Controller))
+	{
+		DisableInput(PC);
+	}
+
+	// Stop movement immediately.
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		MoveComp->StopMovementImmediately();
+		MoveComp->DisableMovement();
+	}
+
+	// Clear dash state/timers just in case.
+	bIsDashing = false;
+	GetWorldTimerManager().ClearTimer(DashDurationHandle);
+	GetWorldTimerManager().ClearTimer(DashCooldownHandle);
+	
+	if (ABaseGameMode* GM = GetWorld()->GetAuthGameMode<ABaseGameMode>())
+	{
+		GM->HandlePlayerDeath();
 	}
 }

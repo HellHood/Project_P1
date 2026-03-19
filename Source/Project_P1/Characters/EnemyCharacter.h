@@ -39,6 +39,10 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, Category="Enemy|AI")
 	float RepathInterval = 0.2f;
+	
+	// Death Handler
+	UFUNCTION()
+	void HandleEnemyDeath(UHealthComponent* HealthComp, AActor* InstigatorActor);
 
 
 

@@ -28,6 +28,20 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
+	
+	// ===== Attack State =====
+	UPROPERTY(VisibleInstanceOnly, Category="Combat")
+	bool bIsAttacking = false;
+
+	UPROPERTY(EditDefaultsOnly, Category="Combat")
+	float LightAttackDuration = 0.3f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Combat")
+	float LightAttackHitTime = 0.1f;
+
+	FTimerHandle AttackDurationHandle;
+	FTimerHandle AttackHitHandle;
+	
 	// ===== Light Attack Tuning =====
 	// Keep these in the component so later we can move them to a Weapon/AttackData asset easily.
 
@@ -52,6 +66,11 @@ private:
 	bool bLightAttackOnCooldown = false;
 	FTimerHandle LightAttackCooldownHandle;
 
+	// ===== Internal =====
+	void PerformLightAttackHit();
+	void EndAttack();
+	
+	
 	void ResetLightAttackCooldown();
 
 	// Core v0 melee hit test.

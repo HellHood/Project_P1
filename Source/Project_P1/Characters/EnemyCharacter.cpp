@@ -26,6 +26,12 @@ void AEnemyCharacter::BeginPlay()
 	// v0: first player pawn
 	TargetPawn = UGameplayStatics::GetPlayerPawn(this, 0);
 	GetWorldTimerManager().SetTimer(RepathHandle, this, &AEnemyCharacter::RepathTick, RepathInterval, true);
+	
+	if (UHealthComponent* HC = GetHealthComponent())
+	{
+		HC->OnDeath.AddDynamic(this, &AEnemyCharacter::HandleEnemyDeath);
+	}
+
 }
 
 void AEnemyCharacter::Tick(float DeltaSeconds)
@@ -151,4 +157,28 @@ bool AEnemyCharacter::HasLineOfSightToTarget() const
 
 	// If nothing hit, LOS is clear. If hit, must be the target.
 	return !bHit || Hit.GetActor() == TargetPawn;
+}
+
+void AEnemyCharacter::HandleEnemyDeath(UHealthComponent* HealthComp, AActor* InstigatorActor)
+{
+	UE_LOG(LogTemp, Warning, TEXT("[Enemy] Died. Instigator: %s"),
+		InstigatorActor ? *InstigatorActor->GetName() : TEXT("None"));
+
+	// Stop timers first so enemy no longer repaths or attacks.
+	GetWorldTimerManager().ClearTimer(RepathHandle);
+	GetWorldTimerManager().ClearTimer(AttackCooldownHandle);
+	bAttackOnCooldown = false;
+
+	// Stop AI movement.
+	if (AAIController* AIC = Cast<AAIController>(GetController()))
+	{
+		AIC->StopMovement();
+	}
+
+	// Stop character movement immediately.
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		MoveComp->StopMovementImmediately();
+		MoveComp->DisableMovement();
+	}
 }

@@ -27,19 +27,53 @@ void UCombatComponent::BeginPlay()
 	
 }
 
+void UCombatComponent::PerformLightAttackHit()
+{
+	FHitResult Hit;
+	const bool bHit = DoLightAttackTrace(Hit);
+
+	if (bHit && Hit.GetActor())
+	{
+		AActor* OwnerActor = GetOwner();
+
+		UGameplayStatics::ApplyDamage(
+			Hit.GetActor(),
+			LightAttackDamage,
+			nullptr,
+			OwnerActor,
+			UDamageType::StaticClass()
+		);
+
+		UE_LOG(LogTemp, Warning, TEXT("[Combat] HIT confirmed: %s"), *Hit.GetActor()->GetName());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Combat] HIT missed"));
+	}
+}
+
+void UCombatComponent::EndAttack()
+{
+	bIsAttacking = false;
+
+	GetWorld()->GetTimerManager().ClearTimer(AttackDurationHandle);
+	GetWorld()->GetTimerManager().ClearTimer(AttackHitHandle);
+	UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack END"));
+}
+
 bool UCombatComponent::TryLightAttack()
 {
-	// Prevent spamming: 1 attack per cooldown window.
-	if (bLightAttackOnCooldown)
+	if (bLightAttackOnCooldown || bIsAttacking)
 	{
 		return false;
 	}
 
-	FHitResult Hit;
-	const bool bHit = DoLightAttackTrace(Hit);
-
-	// Start cooldown regardless of hit, so attack has consistent tempo.
+	bIsAttacking = true;
 	bLightAttackOnCooldown = true;
+	
+	UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack START"));
+
+	// Start cooldown
 	GetWorld()->GetTimerManager().SetTimer(
 		LightAttackCooldownHandle,
 		this,
@@ -48,53 +82,25 @@ bool UCombatComponent::TryLightAttack()
 		false
 	);
 
-	if (bHit)
-	{
-		AActor* HitActor = Hit.GetActor();
-		if (!HitActor)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[Combat] LightAttack: hit result had no actor"));
-			return false;
-		}
+	// Schedule HIT moment
+	GetWorld()->GetTimerManager().SetTimer(
+		AttackHitHandle,
+		this,
+		&UCombatComponent::PerformLightAttackHit,
+		LightAttackHitTime,
+		false
+	);
 
-		// Filter #1: must have HealthComponent
-		UHealthComponent* HC = HitActor->FindComponentByClass<UHealthComponent>();
-		if (!HC)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[Combat] LightAttack: %s has no HealthComponent"), *HitActor->GetName());
-			return false;
-		}
+	// End attack
+	GetWorld()->GetTimerManager().SetTimer(
+		AttackDurationHandle,
+		this,
+		&UCombatComponent::EndAttack,
+		LightAttackDuration,
+		false
+	);
 
-		// Filter #2: ignore dead targets
-		if (HC->IsDead())
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[Combat] LightAttack: %s is already dead"), *HitActor->GetName());
-			return false;
-		}
-
-		// Determine instigator controller if owner is a pawn (player/enemy later)
-		AController* InstigatorController = nullptr;
-		if (const APawn* OwnerPawn = Cast<APawn>(GetOwner()))
-		{
-			InstigatorController = OwnerPawn->GetController();
-		}
-
-		UGameplayStatics::ApplyDamage(
-			HitActor,
-			LightAttackDamage,
-			InstigatorController,
-			GetOwner(),                 // DamageCauser (owner of combat)
-			UDamageType::StaticClass()
-		);
-
-		UE_LOG(LogTemp, Warning, TEXT("[Combat] LightAttack valid hit: %s (Damage=%.1f)"),
-			*HitActor->GetName(), LightAttackDamage);
-
-		return true;
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("[Combat] LightAttack: no hit"));
-	return false;
+	return true;
 }
 
 void UCombatComponent::ResetLightAttackCooldown()
@@ -139,3 +145,4 @@ bool UCombatComponent::DoLightAttackTrace(FHitResult& OutHit) const
 
 	return bHit;
 }
+
