@@ -4,10 +4,29 @@
 #include "Components/ActorComponent.h"
 #include "CombatComponent.generated.h"
 
-// v0 CombatComponent:
-// - Owns attack parameters (damage/range/radius/cooldown)
-// - Executes traces and applies damage via Unreal damage pipeline
-// - Character/weapon just calls TryLightAttack()
+USTRUCT(BlueprintType)
+struct FAttackData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
+	float Damage = 25.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
+	float Duration = 0.3f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
+	float HitTime = 0.1f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
+	float Range = 150.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
+	float Radius = 50.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
+	float Cooldown = 0.25f;
+};
 
 UCLASS(ClassGroup=(Project_P1), meta=(BlueprintSpawnableComponent))
 class PROJECT_P1_API UCombatComponent : public UActorComponent
@@ -17,62 +36,42 @@ class PROJECT_P1_API UCombatComponent : public UActorComponent
 public:
 	UCombatComponent();
 
-	// Attempt to start a light attack. Returns true if the attack was executed.
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	bool TryLightAttack();
 
-	// Optional: expose cooldown state for UI/debug.
 	UFUNCTION(BlueprintPure, Category="Combat")
 	bool IsLightAttackOnCooldown() const { return bLightAttackOnCooldown; }
 
 protected:
 	virtual void BeginPlay() override;
 
-	
-	// ===== Attack State =====
-	UPROPERTY(VisibleInstanceOnly, Category="Combat")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat|AttackData")
+	FAttackData LightAttackData;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Combat|AttackData")
+	FAttackData CurrentAttackData;
+
+	UPROPERTY(VisibleInstanceOnly, Category="Combat|State")
 	bool bIsAttacking = false;
 
-	UPROPERTY(EditDefaultsOnly, Category="Combat")
-	float LightAttackDuration = 0.3f;
+	UPROPERTY(VisibleInstanceOnly, Category="Combat|Input")
+	bool bBufferedLightAttack = false;
 
-	UPROPERTY(EditDefaultsOnly, Category="Combat")
-	float LightAttackHitTime = 0.1f;
-
-	FTimerHandle AttackDurationHandle;
-	FTimerHandle AttackHitHandle;
-	
-	// ===== Light Attack Tuning =====
-	// Keep these in the component so later we can move them to a Weapon/AttackData asset easily.
-
-	UPROPERTY(EditDefaultsOnly, Category="Combat")
-	float LightAttackDamage = 25.f;
-
-	UPROPERTY(EditDefaultsOnly, Category="Combat")
-	float LightAttackRange = 150.f;
-
-	UPROPERTY(EditDefaultsOnly, Category="Combat")
-	float LightAttackRadius = 50.f;
-
-	UPROPERTY(EditDefaultsOnly, Category="Combat")
-	float LightAttackCooldown = 0.25f;
-
-	// Debug draw for traces.
-	UPROPERTY(EditDefaultsOnly, Category="Combat")
+	UPROPERTY(EditDefaultsOnly, Category="Combat|Debug")
 	bool bDrawAttackDebug = true;
 
 private:
-	// Cooldown bookkeeping.
 	bool bLightAttackOnCooldown = false;
+
+	FTimerHandle AttackDurationHandle;
+	FTimerHandle AttackHitHandle;
 	FTimerHandle LightAttackCooldownHandle;
 
-	// ===== Internal =====
-	void PerformLightAttackHit();
+	void StartAttack(const FAttackData& AttackData);
+	void ExecuteCurrentAttackHit();
 	void EndAttack();
-	
-	
+
 	void ResetLightAttackCooldown();
 
-	// Core v0 melee hit test.
-	bool DoLightAttackTrace(FHitResult& OutHit) const;
+	bool TraceCurrentAttack(FHitResult& OutHit) const;
 };

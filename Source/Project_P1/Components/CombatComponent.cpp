@@ -1,55 +1,127 @@
 #include "CombatComponent.h"
 
-#include "Kismet/GameplayStatics.h"
-#include "GameFramework/DamageType.h" 
 #include "DrawDebugHelpers.h"
-#include "GameFramework/Actor.h"
 #include "Engine/World.h"
-#include "TimerManager.h"
-
-#include "../Components/HealthComponent.h"
-#include "../Components/HealthComponent.h"
-#include "GameFramework/Pawn.h"
+#include "GameFramework/Actor.h"
 #include "GameFramework/Controller.h"
+#include "GameFramework/DamageType.h"
+#include "GameFramework/Pawn.h"
+#include "Kismet/GameplayStatics.h"
+#include "TimerManager.h"
+#include "../Components/HealthComponent.h"
 
 static const ECollisionChannel MeleeChannel = ECC_GameTraceChannel1;
-
 
 UCombatComponent::UCombatComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
-	
 }
 
 void UCombatComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	
 }
 
-void UCombatComponent::PerformLightAttackHit()
+bool UCombatComponent::TryLightAttack()
+{
+	if (bIsAttacking)
+	{
+		bBufferedLightAttack = true;
+		UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack buffered"));
+		return false;
+	}
+
+	if (bLightAttackOnCooldown)
+	{
+		return false;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack started"));
+
+	StartAttack(LightAttackData);
+	return true;
+}
+
+void UCombatComponent::StartAttack(const FAttackData& AttackData)
+{
+	CurrentAttackData = AttackData;
+
+	bIsAttacking = true;
+	bLightAttackOnCooldown = true;
+
+	GetWorld()->GetTimerManager().SetTimer(
+		LightAttackCooldownHandle,
+		this,
+		&UCombatComponent::ResetLightAttackCooldown,
+		CurrentAttackData.Cooldown,
+		false
+	);
+
+	GetWorld()->GetTimerManager().SetTimer(
+		AttackHitHandle,
+		this,
+		&UCombatComponent::ExecuteCurrentAttackHit,
+		CurrentAttackData.HitTime,
+		false
+	);
+
+	GetWorld()->GetTimerManager().SetTimer(
+		AttackDurationHandle,
+		this,
+		&UCombatComponent::EndAttack,
+		CurrentAttackData.Duration,
+		false
+	);
+}
+
+void UCombatComponent::ExecuteCurrentAttackHit()
 {
 	FHitResult Hit;
-	const bool bHit = DoLightAttackTrace(Hit);
+	const bool bHit = TraceCurrentAttack(Hit);
 
-	if (bHit && Hit.GetActor())
+	if (!bHit)
 	{
-		AActor* OwnerActor = GetOwner();
-
-		UGameplayStatics::ApplyDamage(
-			Hit.GetActor(),
-			LightAttackDamage,
-			nullptr,
-			OwnerActor,
-			UDamageType::StaticClass()
-		);
-
-		UE_LOG(LogTemp, Warning, TEXT("[Combat] HIT confirmed: %s"), *Hit.GetActor()->GetName());
+		UE_LOG(LogTemp, Warning, TEXT("[Combat] Hit missed"));
+		return;
 	}
-	else
+
+	AActor* HitActor = Hit.GetActor();
+	if (!HitActor)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Combat] HIT missed"));
+		UE_LOG(LogTemp, Warning, TEXT("[Combat] Hit result had no actor"));
+		return;
 	}
+
+	UHealthComponent* HealthComp = HitActor->FindComponentByClass<UHealthComponent>();
+	if (!HealthComp)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Combat] Hit ignored: %s has no HealthComponent"), *HitActor->GetName());
+		return;
+	}
+
+	if (HealthComp->IsDead())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Combat] Hit ignored: %s is already dead"), *HitActor->GetName());
+		return;
+	}
+
+	AActor* OwnerActor = GetOwner();
+
+	AController* InstigatorController = nullptr;
+	if (const APawn* OwnerPawn = Cast<APawn>(OwnerActor))
+	{
+		InstigatorController = OwnerPawn->GetController();
+	}
+
+	UGameplayStatics::ApplyDamage(
+		HitActor,
+		CurrentAttackData.Damage,
+		InstigatorController,
+		OwnerActor,
+		UDamageType::StaticClass()
+	);
+
+	UE_LOG(LogTemp, Warning, TEXT("[Combat] Hit confirmed: %s"), *HitActor->GetName());
 }
 
 void UCombatComponent::EndAttack()
@@ -58,49 +130,17 @@ void UCombatComponent::EndAttack()
 
 	GetWorld()->GetTimerManager().ClearTimer(AttackDurationHandle);
 	GetWorld()->GetTimerManager().ClearTimer(AttackHitHandle);
-	UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack END"));
-}
 
-bool UCombatComponent::TryLightAttack()
-{
-	if (bLightAttackOnCooldown || bIsAttacking)
+	UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack ended"));
+
+	if (bBufferedLightAttack)
 	{
-		return false;
+		bBufferedLightAttack = false;
+
+		UE_LOG(LogTemp, Warning, TEXT("[Combat] Buffered attack consumed"));
+
+		TryLightAttack();
 	}
-
-	bIsAttacking = true;
-	bLightAttackOnCooldown = true;
-	
-	UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack START"));
-
-	// Start cooldown
-	GetWorld()->GetTimerManager().SetTimer(
-		LightAttackCooldownHandle,
-		this,
-		&UCombatComponent::ResetLightAttackCooldown,
-		LightAttackCooldown,
-		false
-	);
-
-	// Schedule HIT moment
-	GetWorld()->GetTimerManager().SetTimer(
-		AttackHitHandle,
-		this,
-		&UCombatComponent::PerformLightAttackHit,
-		LightAttackHitTime,
-		false
-	);
-
-	// End attack
-	GetWorld()->GetTimerManager().SetTimer(
-		AttackDurationHandle,
-		this,
-		&UCombatComponent::EndAttack,
-		LightAttackDuration,
-		false
-	);
-
-	return true;
 }
 
 void UCombatComponent::ResetLightAttackCooldown()
@@ -109,20 +149,23 @@ void UCombatComponent::ResetLightAttackCooldown()
 	GetWorld()->GetTimerManager().ClearTimer(LightAttackCooldownHandle);
 }
 
-bool UCombatComponent::DoLightAttackTrace(FHitResult& OutHit) const
+bool UCombatComponent::TraceCurrentAttack(FHitResult& OutHit) const
 {
 	const AActor* OwnerActor = GetOwner();
-	if (!OwnerActor) return false;
+	if (!OwnerActor)
+	{
+		return false;
+	}
 
 	const UWorld* World = GetWorld();
-	if (!World) return false;
-
-	// v0: forward sphere sweep from owner's position.
-	// NOTE: Later we will source Start/End from a weapon socket or animation-driven hit window.
+	if (!World)
+	{
+		return false;
+	}
 
 	const FVector Start = OwnerActor->GetActorLocation() + FVector(0.f, 0.f, 50.f);
 	const FVector Forward = OwnerActor->GetActorForwardVector();
-	const FVector End = Start + Forward * LightAttackRange;
+	const FVector End = Start + Forward * CurrentAttackData.Range;
 
 	FCollisionQueryParams Params;
 	Params.AddIgnoredActor(OwnerActor);
@@ -133,16 +176,15 @@ bool UCombatComponent::DoLightAttackTrace(FHitResult& OutHit) const
 		End,
 		FQuat::Identity,
 		MeleeChannel,
-		FCollisionShape::MakeSphere(LightAttackRadius),
+		FCollisionShape::MakeSphere(CurrentAttackData.Radius),
 		Params
 	);
 
 	if (bDrawAttackDebug)
 	{
 		DrawDebugLine(World, Start, End, FColor::Red, false, 1.0f);
-		DrawDebugSphere(World, End, LightAttackRadius, 16, FColor::Red, false, 1.0f);
+		DrawDebugSphere(World, End, CurrentAttackData.Radius, 16, FColor::Red, false, 1.0f);
 	}
 
 	return bHit;
 }
-

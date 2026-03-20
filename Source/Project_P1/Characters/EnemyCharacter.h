@@ -4,10 +4,7 @@
 #include "BaseCharacter.h"
 #include "EnemyCharacter.generated.h"
 
-// Enemy v0:
-// - Chases the player using AI MoveTo
-// - Applies damage in melee range on a cooldown
-// No animations yet; pure gameplay loop.
+class UHealthComponent;
 
 UCLASS()
 class PROJECT_P1_API AEnemyCharacter : public ABaseCharacter
@@ -21,9 +18,11 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 
-	// ===== Tuning =====
 	UPROPERTY(EditDefaultsOnly, Category="Enemy|AI")
 	float ChaseRange = 1200.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Enemy|AI")
+	float RepathInterval = 0.2f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Enemy|Combat")
 	float AttackRange = 140.f;
@@ -36,33 +35,25 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Enemy|Debug")
 	bool bDebugEnemy = false;
-	
-	UPROPERTY(EditDefaultsOnly, Category="Enemy|AI")
-	float RepathInterval = 0.2f;
-	
-	// Death Handler
+
 	UFUNCTION()
 	void HandleEnemyDeath(UHealthComponent* HealthComp, AActor* InstigatorActor);
 
-
-
-
 private:
-	// Cached target (player pawn)
 	UPROPERTY()
 	APawn* TargetPawn = nullptr;
 
 	bool bAttackOnCooldown = false;
-	FTimerHandle AttackCooldownHandle;
-	
-	FTimerHandle RepathHandle;
 
-	void ResetAttackCooldown();
+	FTimerHandle AttackCooldownHandle;
+	FTimerHandle RepathHandle;
 
 	bool IsTargetValid() const;
 	float DistanceToTarget2D() const;
+	bool HasLineOfSightToTarget() const;
+
 	void ChaseTarget();
 	void TryAttackTarget();
 	void RepathTick();
-	bool HasLineOfSightToTarget() const;
+	void ResetAttackCooldown();
 };

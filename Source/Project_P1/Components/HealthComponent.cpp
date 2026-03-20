@@ -1,4 +1,5 @@
 #include "HealthComponent.h"
+
 #include "GameFramework/Actor.h"
 #include "GameFramework/Controller.h"
 
@@ -11,12 +12,9 @@ void UHealthComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Initialize current health to max at runtime.
 	Health = MaxHealth;
 	bHasDied = false;
 
-	// Hook into Unreal's built-in damage pipeline.
-	// If someone calls ApplyDamage(...) on the owning actor, we receive it here.
 	if (AActor* Owner = GetOwner())
 	{
 		Owner->OnTakeAnyDamage.AddDynamic(this, &UHealthComponent::HandleTakeAnyDamage);
@@ -25,27 +23,38 @@ void UHealthComponent::BeginPlay()
 
 void UHealthComponent::ApplyDamage(float DamageAmount, AActor* InstigatorActor)
 {
-	if (DamageAmount <= 0.f) return;
-	if (IsDead()) return;
+	if (DamageAmount <= 0.f)
+	{
+		return;
+	}
 
-	// In health logic, "damage" reduces health (negative delta).
-	const float NewHealth = Health - DamageAmount;
-	SetHealth(NewHealth, -DamageAmount, InstigatorActor);
+	if (IsDead())
+	{
+		return;
+	}
+
+	SetHealth(Health - DamageAmount, -DamageAmount, InstigatorActor);
 }
 
 void UHealthComponent::Heal(float HealAmount, AActor* InstigatorActor)
 {
-	if (HealAmount <= 0.f) return;
-	if (IsDead()) return; // v1 rule: no healing from death (change later if you want revives)
+	if (HealAmount <= 0.f)
+	{
+		return;
+	}
 
-	const float NewHealth = Health + HealAmount;
-	SetHealth(NewHealth, +HealAmount, InstigatorActor);
+	if (IsDead())
+	{
+		return;
+	}
+
+	SetHealth(Health + HealAmount, HealAmount, InstigatorActor);
 }
 
 void UHealthComponent::ResetToMax()
 {
 	bHasDied = false;
-	SetHealth(MaxHealth, MaxHealth - Health, /*InstigatorActor*/ nullptr);
+	SetHealth(MaxHealth, MaxHealth - Health, nullptr);
 }
 
 void UHealthComponent::HandleTakeAnyDamage(
@@ -56,32 +65,33 @@ void UHealthComponent::HandleTakeAnyDamage(
 	AActor* DamageCauser
 )
 {
-	// Unreal conventions:
-	// - Damage can be 0, ignore it.
-	// - DamageCauser is usually the weapon / projectile / attacker actor.
-	if (Damage <= 0.f) return;
-	if (IsDead()) return;
+	if (Damage <= 0.f)
+	{
+		return;
+	}
 
-	AActor* InstigatorActor = DamageCauser;
-	SetHealth(Health - Damage, -Damage, InstigatorActor);
+	if (IsDead())
+	{
+		return;
+	}
+
+	SetHealth(Health - Damage, -Damage, DamageCauser);
+
 	UE_LOG(LogTemp, Warning, TEXT("[Health] Took %.1f damage. New=%.1f"), Damage, Health);
 }
 
 void UHealthComponent::SetHealth(float NewHealth, float Delta, AActor* InstigatorActor)
 {
-	const float Clamped = FMath::Clamp(NewHealth, 0.f, MaxHealth);
-	if (FMath::IsNearlyEqual(Clamped, Health))
+	const float ClampedHealth = FMath::Clamp(NewHealth, 0.f, MaxHealth);
+	if (FMath::IsNearlyEqual(ClampedHealth, Health))
 	{
-		// No change => no events.
 		return;
 	}
 
-	Health = Clamped;
+	Health = ClampedHealth;
 
-	// Notify listeners (UI, animations, hit reactions, etc.)
 	OnHealthChanged.Broadcast(this, Health, Delta, InstigatorActor);
 
-	// Fire death once.
 	if (!bHasDied && Health <= 0.f)
 	{
 		bHasDied = true;
