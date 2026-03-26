@@ -22,37 +22,49 @@ void UCombatComponent::BeginPlay()
 	Super::BeginPlay();
 }
 
-bool UCombatComponent::TryLightAttack()
+bool UCombatComponent::RequestAttack(EAttackInputType InputType)
 {
 	if (bIsAttacking)
 	{
-		bBufferedLightAttack = true;
+		bHasBufferedAttack = true;
+		BufferedInputType = InputType;
+
 		UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack buffered"));
 		return false;
 	}
 
-	if (bLightAttackOnCooldown)
+	if (bAttackOnCooldown)
 	{
 		return false;
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack started"));
+	FAttackData AttackData;
 
-	StartAttack(LightAttackData);
+	// If no attack is active, use the default input resolver.
+	const bool bResolved = ResolveAttackData(InputType, AttackData);
+	if (!bResolved)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Combat] No attack data found for requested input"));
+		return false;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack started: %s"), *AttackData.AttackId.ToString());
+
+	BeginAttack(AttackData);
 	return true;
 }
 
-void UCombatComponent::StartAttack(const FAttackData& AttackData)
+void UCombatComponent::BeginAttack(const FAttackData& AttackData)
 {
 	CurrentAttackData = AttackData;
 
 	bIsAttacking = true;
-	bLightAttackOnCooldown = true;
+	bAttackOnCooldown = true;
 
 	GetWorld()->GetTimerManager().SetTimer(
-		LightAttackCooldownHandle,
+		AttackCooldownHandle,
 		this,
-		&UCombatComponent::ResetLightAttackCooldown,
+		&UCombatComponent::ResetAttackCooldown,
 		CurrentAttackData.Cooldown,
 		false
 	);
@@ -131,22 +143,30 @@ void UCombatComponent::EndAttack()
 	GetWorld()->GetTimerManager().ClearTimer(AttackDurationHandle);
 	GetWorld()->GetTimerManager().ClearTimer(AttackHitHandle);
 
-	UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack ended"));
+	UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack ended: %s"), *CurrentAttackData.AttackId.ToString());
 
-	if (bBufferedLightAttack)
+	if (bHasBufferedAttack)
 	{
-		bBufferedLightAttack = false;
+		FAttackData NextAttackData;
+		const EAttackInputType NextInputType = BufferedInputType;
 
-		UE_LOG(LogTemp, Warning, TEXT("[Combat] Buffered attack consumed"));
+		bHasBufferedAttack = false;
 
-		TryLightAttack();
+		if (ResolveTransitionAttack(NextInputType, NextAttackData))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Combat] Transition accepted: %s"), *NextAttackData.AttackId.ToString());
+			BeginAttack(NextAttackData);
+			return;
+		}
+
+		UE_LOG(LogTemp, Warning, TEXT("[Combat] Buffered input had no valid transition"));
 	}
 }
 
-void UCombatComponent::ResetLightAttackCooldown()
+void UCombatComponent::ResetAttackCooldown()
 {
-	bLightAttackOnCooldown = false;
-	GetWorld()->GetTimerManager().ClearTimer(LightAttackCooldownHandle);
+	bAttackOnCooldown = false;
+	GetWorld()->GetTimerManager().ClearTimer(AttackCooldownHandle);
 }
 
 bool UCombatComponent::TraceCurrentAttack(FHitResult& OutHit) const
@@ -187,4 +207,57 @@ bool UCombatComponent::TraceCurrentAttack(FHitResult& OutHit) const
 	}
 
 	return bHit;
+}
+
+bool UCombatComponent::ResolveAttackData(EAttackInputType InputType, FAttackData& OutAttackData) const
+{
+	switch (InputType)
+	{
+	case EAttackInputType::Light:
+		OutAttackData = LightAttackData;
+		return true;
+
+	case EAttackInputType::Heavy:
+		OutAttackData = HeavyAttackData;
+		return true;
+
+	default:
+		return false;
+	}
+}
+
+bool UCombatComponent::ResolveTransitionAttack(EAttackInputType InputType, FAttackData& OutAttackData) const
+{
+	for (const FAttackTransition& Transition : CurrentAttackData.Transitions)
+	{
+		if (Transition.InputType == InputType)
+		{
+			return ResolveAttackById(Transition.NextAttackId, OutAttackData);
+		}
+	}
+
+	return false;
+}
+
+bool UCombatComponent::ResolveAttackById(FName AttackId, FAttackData& OutAttackData) const
+{
+	if (AttackId == LightAttackData.AttackId)
+	{
+		OutAttackData = LightAttackData;
+		return true;
+	}
+
+	if (AttackId == LightFollowupData.AttackId)
+	{
+		OutAttackData = LightFollowupData;
+		return true;
+	}
+
+	if (AttackId == HeavyAttackData.AttackId)
+	{
+		OutAttackData = HeavyAttackData;
+		return true;
+	}
+
+	return false;
 }

@@ -201,7 +201,7 @@ void APlayerCharacter::StartLightAttack()
 {
 	if (UCombatComponent* CombatComp = GetCombatComponent())
 	{
-		CombatComp->TryLightAttack();
+		CombatComp->RequestAttack((EAttackInputType::Light));
 	}
 }
 
