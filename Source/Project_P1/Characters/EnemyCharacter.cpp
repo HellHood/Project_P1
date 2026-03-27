@@ -34,6 +34,7 @@ void AEnemyCharacter::BeginPlay()
 	if (UHealthComponent* HealthComp = GetHealthComponent())
 	{
 		HealthComp->OnDeath.AddDynamic(this, &AEnemyCharacter::HandleEnemyDeath);
+		HealthComp->OnHealthChanged.AddDynamic(this, &AEnemyCharacter::HandleEnemyHealthChanged);
 	}
 }
 
@@ -41,12 +42,9 @@ void AEnemyCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (UHealthComponent* HealthComp = GetHealthComponent())
+	if (bIsDead)
 	{
-		if (HealthComp->IsDead())
-		{
-			return;
-		}
+		return;
 	}
 
 	if (!IsTargetValid())
@@ -117,6 +115,11 @@ bool AEnemyCharacter::HasLineOfSightToTarget() const
 
 void AEnemyCharacter::ChaseTarget()
 {
+	if (bIsDead)
+	{
+		return;
+	}
+
 	AAIController* AIController = Cast<AAIController>(GetController());
 	if (!AIController)
 	{
@@ -128,6 +131,11 @@ void AEnemyCharacter::ChaseTarget()
 
 void AEnemyCharacter::TryAttackTarget()
 {
+	if (bIsDead)
+	{
+		return;
+	}
+
 	if (bAttackOnCooldown)
 	{
 		return;
@@ -166,17 +174,14 @@ void AEnemyCharacter::TryAttackTarget()
 
 void AEnemyCharacter::RepathTick()
 {
-	if (!IsTargetValid())
+	if (bIsDead)
 	{
 		return;
 	}
 
-	if (UHealthComponent* HealthComp = GetHealthComponent())
+	if (!IsTargetValid())
 	{
-		if (HealthComp->IsDead())
-		{
-			return;
-		}
+		return;
 	}
 
 	const float DistanceToTarget = DistanceToTarget2D();
@@ -194,6 +199,13 @@ void AEnemyCharacter::ResetAttackCooldown()
 
 void AEnemyCharacter::HandleEnemyDeath(UHealthComponent* HealthComp, AActor* InstigatorActor)
 {
+	if (bIsDead)
+	{
+		return;
+	}
+
+	bIsDead = true;
+
 	UE_LOG(
 		LogTemp,
 		Warning,
@@ -208,11 +220,55 @@ void AEnemyCharacter::HandleEnemyDeath(UHealthComponent* HealthComp, AActor* Ins
 	if (AAIController* AIController = Cast<AAIController>(GetController()))
 	{
 		AIController->StopMovement();
+		AIController->ClearFocus(EAIFocusPriority::Gameplay);
 	}
 
 	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
 	{
 		MoveComp->StopMovementImmediately();
 		MoveComp->DisableMovement();
+	}
+
+	SetActorTickEnabled(false);
+}
+
+void AEnemyCharacter::HandleEnemyHealthChanged(
+	UHealthComponent* HealthComp,
+	float NewHealth,
+	float Delta,
+	AActor* InstigatorActor
+)
+{
+	if (bIsDead)
+	{
+		return;
+	}
+
+	if (Delta >= 0.f)
+	{
+		return;
+	}
+
+	if (bDebugEnemy)
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[Enemy] Took damage: %.1f"),
+			-Delta
+		);
+	}
+
+	if (!InstigatorActor)
+	{
+		return;
+	}
+
+	const FVector Direction = (GetActorLocation() - InstigatorActor->GetActorLocation()).GetSafeNormal();
+	const float KnockbackStrength = 400.f;
+
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		MoveComp->AddImpulse(Direction * KnockbackStrength, true);
 	}
 }

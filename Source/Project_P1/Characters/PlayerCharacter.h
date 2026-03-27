@@ -11,6 +11,7 @@ class UHealthComponent;
 class UInputAction;
 class UInputMappingContext;
 class USpringArmComponent;
+class UStaticMeshComponent;
 
 UCLASS()
 class PROJECT_P1_API APlayerCharacter : public ABaseCharacter
@@ -48,6 +49,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input")
 	UInputAction* LightAttackAction;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input")
+	UInputAction* HeavyAttackAction;
+
+	// Temporary visual weapon mesh attached to the player.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Weapon")
+	UStaticMeshComponent* WeaponMesh;
+
 	UPROPERTY(EditDefaultsOnly, Category="Dash")
 	float DashSpeed = 1800.0f;
 
@@ -77,6 +85,7 @@ protected:
 	void OnJumpPressed();
 	void OnJumpReleased();
 	void StartLightAttack();
+	void StartHeavyAttack();
 
 private:
 	virtual void Tick(float DeltaSeconds) override;

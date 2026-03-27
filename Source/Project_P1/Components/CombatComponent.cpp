@@ -1,5 +1,6 @@
 #include "CombatComponent.h"
 
+#include "../Components/HealthComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
@@ -8,7 +9,6 @@
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
-#include "../Components/HealthComponent.h"
 
 static const ECollisionChannel MeleeChannel = ECC_GameTraceChannel1;
 
@@ -24,10 +24,20 @@ void UCombatComponent::BeginPlay()
 
 bool UCombatComponent::RequestAttack(EAttackInputType InputType)
 {
+	// If an attack is already active, store the input for transition resolution.
 	if (bIsAttacking)
 	{
 		bHasBufferedAttack = true;
 		BufferedInputType = InputType;
+
+		if (const UWorld* World = GetWorld())
+		{
+			BufferedInputTime = World->GetTimeSeconds() - AttackStartTime;
+		}
+		else
+		{
+			BufferedInputTime = 0.0f;
+		}
 
 		UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack buffered"));
 		return false;
@@ -39,12 +49,9 @@ bool UCombatComponent::RequestAttack(EAttackInputType InputType)
 	}
 
 	FAttackData AttackData;
-
-	// If no attack is active, use the default input resolver.
-	const bool bResolved = ResolveAttackData(InputType, AttackData);
-	if (!bResolved)
+	if (!ResolveDefaultAttackData(InputType, AttackData))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Combat] No attack data found for requested input"));
+		UE_LOG(LogTemp, Warning, TEXT("[Combat] No default attack found for requested input"));
 		return false;
 	}
 
@@ -60,6 +67,17 @@ void UCombatComponent::BeginAttack(const FAttackData& AttackData)
 
 	bIsAttacking = true;
 	bAttackOnCooldown = true;
+	bHasBufferedAttack = false;
+	BufferedInputTime = 0.0f;
+
+	if (const UWorld* World = GetWorld())
+	{
+		AttackStartTime = World->GetTimeSeconds();
+	}
+	else
+	{
+		AttackStartTime = 0.0f;
+	}
 
 	GetWorld()->GetTimerManager().SetTimer(
 		AttackCooldownHandle,
@@ -145,22 +163,26 @@ void UCombatComponent::EndAttack()
 
 	UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack ended: %s"), *CurrentAttackData.AttackId.ToString());
 
-	if (bHasBufferedAttack)
+	if (!bHasBufferedAttack)
 	{
-		FAttackData NextAttackData;
-		const EAttackInputType NextInputType = BufferedInputType;
-
-		bHasBufferedAttack = false;
-
-		if (ResolveTransitionAttack(NextInputType, NextAttackData))
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[Combat] Transition accepted: %s"), *NextAttackData.AttackId.ToString());
-			BeginAttack(NextAttackData);
-			return;
-		}
-
-		UE_LOG(LogTemp, Warning, TEXT("[Combat] Buffered input had no valid transition"));
+		return;
 	}
+
+	const EAttackInputType NextInputType = BufferedInputType;
+	const float InputTime = BufferedInputTime;
+
+	bHasBufferedAttack = false;
+	BufferedInputTime = 0.0f;
+
+	FAttackData NextAttackData;
+	if (ResolveTransitionAttack(NextInputType, InputTime, NextAttackData))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Combat] Transition accepted: %s"), *NextAttackData.AttackId.ToString());
+		BeginAttack(NextAttackData);
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[Combat] Buffered input had no valid transition"));
 }
 
 void UCombatComponent::ResetAttackCooldown()
@@ -209,7 +231,7 @@ bool UCombatComponent::TraceCurrentAttack(FHitResult& OutHit) const
 	return bHit;
 }
 
-bool UCombatComponent::ResolveAttackData(EAttackInputType InputType, FAttackData& OutAttackData) const
+bool UCombatComponent::ResolveDefaultAttackData(EAttackInputType InputType, FAttackData& OutAttackData) const
 {
 	switch (InputType)
 	{
@@ -226,14 +248,29 @@ bool UCombatComponent::ResolveAttackData(EAttackInputType InputType, FAttackData
 	}
 }
 
-bool UCombatComponent::ResolveTransitionAttack(EAttackInputType InputType, FAttackData& OutAttackData) const
+bool UCombatComponent::ResolveTransitionAttack(EAttackInputType InputType, float InputTime, FAttackData& OutAttackData) const
 {
 	for (const FAttackTransition& Transition : CurrentAttackData.Transitions)
 	{
-		if (Transition.InputType == InputType)
+		if (Transition.InputType != InputType)
 		{
-			return ResolveAttackById(Transition.NextAttackId, OutAttackData);
+			continue;
 		}
+
+		// If both values are zero, treat the transition like an untimed follow-up.
+		const bool bUseTimingWindow =
+			!FMath::IsNearlyZero(Transition.WindowStart) ||
+			!FMath::IsNearlyZero(Transition.WindowEnd);
+
+		if (bUseTimingWindow)
+		{
+			if (InputTime < Transition.WindowStart || InputTime > Transition.WindowEnd)
+			{
+				continue;
+			}
+		}
+
+		return ResolveAttackById(Transition.NextAttackId, OutAttackData);
 	}
 
 	return false;

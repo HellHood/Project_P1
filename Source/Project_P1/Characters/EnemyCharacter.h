@@ -39,11 +39,15 @@ protected:
 	UFUNCTION()
 	void HandleEnemyDeath(UHealthComponent* HealthComp, AActor* InstigatorActor);
 
+	UFUNCTION()
+	void HandleEnemyHealthChanged(UHealthComponent* HealthComp, float NewHealth, float Delta, AActor* InstigatorActor);
+
 private:
 	UPROPERTY()
 	APawn* TargetPawn = nullptr;
 
 	bool bAttackOnCooldown = false;
+	bool bIsDead = false;
 
 	FTimerHandle AttackCooldownHandle;
 	FTimerHandle RepathHandle;

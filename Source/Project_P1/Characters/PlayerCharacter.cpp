@@ -4,6 +4,7 @@
 #include "../Core/BaseGameMode.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -11,6 +12,8 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "HAL/IConsoleManager.h"
 #include "Project_P1/Components/HealthComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/LocalPlayer.h"
 
 static int32 GMovementDebug = 0;
 static FAutoConsoleVariableRef CVarMovementDebug(
@@ -42,6 +45,12 @@ APlayerCharacter::APlayerCharacter()
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
 	bUseControllerRotationRoll = false;
+
+	// Temporary weapon mesh for early gameplay testing.
+	WeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMesh"));
+	WeaponMesh->SetupAttachment(GetMesh(), TEXT("hand_r"));
+	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	WeaponMesh->SetGenerateOverlapEvents(false);
 
 	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
 	if (MoveComp)
@@ -149,6 +158,15 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 	{
 		UE_LOG(LogTemp, Warning, TEXT("LightAttackAction is NOT set on %s"), *GetName());
 	}
+
+	if (HeavyAttackAction)
+	{
+		EnhancedInput->BindAction(HeavyAttackAction, ETriggerEvent::Started, this, &APlayerCharacter::StartHeavyAttack);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("HeavyAttackAction is NOT set on %s"), *GetName());
+	}
 }
 
 void APlayerCharacter::Move(const FInputActionValue& Value)
@@ -201,7 +219,15 @@ void APlayerCharacter::StartLightAttack()
 {
 	if (UCombatComponent* CombatComp = GetCombatComponent())
 	{
-		CombatComp->RequestAttack((EAttackInputType::Light));
+		CombatComp->RequestAttack(EAttackInputType::Light);
+	}
+}
+
+void APlayerCharacter::StartHeavyAttack()
+{
+	if (UCombatComponent* CombatComp = GetCombatComponent())
+	{
+		CombatComp->RequestAttack(EAttackInputType::Heavy);
 	}
 }
 
