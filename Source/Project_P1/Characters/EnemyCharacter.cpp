@@ -47,6 +47,32 @@ void AEnemyCharacter::Tick(float DeltaSeconds)
 		return;
 	}
 
+	// Carry forward temporarily overrides normal chase/attack logic.
+	if (bIsCarryForwardActive)
+	{
+		ActiveCarryTimeRemaining -= DeltaSeconds;
+
+		if (ActiveCarryTimeRemaining <= 0.f)
+		{
+			bIsCarryForwardActive = false;
+			ActiveCarryDirection = FVector::ZeroVector;
+			ActiveCarrySpeed = 0.f;
+			ActiveCarryTimeRemaining = 0.f;
+
+			if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+			{
+				MoveComp->StopMovementImmediately();
+			}
+		}
+		else
+		{
+			const FVector DeltaMove = ActiveCarryDirection * ActiveCarrySpeed * DeltaSeconds;
+			AddActorWorldOffset(DeltaMove, true);
+		}
+
+		return;
+	}
+
 	if (!IsTargetValid())
 	{
 		TargetPawn = UGameplayStatics::GetPlayerPawn(this, 0);
@@ -71,6 +97,26 @@ void AEnemyCharacter::Tick(float DeltaSeconds)
 			bAttackOnCooldown ? 1 : 0
 		);
 	}
+}
+
+void AEnemyCharacter::SetPendingHitReaction(
+	EHitReactionType ReactionType,
+	const FVector& Direction,
+	float KnockbackStrength,
+	float LaunchStrength,
+	float CarrySpeed,
+	float CarryDuration
+)
+{
+	bHasPendingHitReaction = true;
+
+	PendingReactionType = ReactionType;
+	PendingHitReactionDirection = Direction;
+
+	PendingKnockbackStrength = KnockbackStrength;
+	PendingLaunchStrength = LaunchStrength;
+	PendingCarrySpeed = CarrySpeed;
+	PendingCarryDuration = CarryDuration;
 }
 
 bool AEnemyCharacter::IsTargetValid() const
@@ -115,7 +161,7 @@ bool AEnemyCharacter::HasLineOfSightToTarget() const
 
 void AEnemyCharacter::ChaseTarget()
 {
-	if (bIsDead)
+	if (bIsDead || bIsCarryForwardActive)
 	{
 		return;
 	}
@@ -131,7 +177,7 @@ void AEnemyCharacter::ChaseTarget()
 
 void AEnemyCharacter::TryAttackTarget()
 {
-	if (bIsDead)
+	if (bIsDead || bIsCarryForwardActive)
 	{
 		return;
 	}
@@ -174,7 +220,7 @@ void AEnemyCharacter::TryAttackTarget()
 
 void AEnemyCharacter::RepathTick()
 {
-	if (bIsDead)
+	if (bIsDead || bIsCarryForwardActive)
 	{
 		return;
 	}
@@ -205,6 +251,7 @@ void AEnemyCharacter::HandleEnemyDeath(UHealthComponent* HealthComp, AActor* Ins
 	}
 
 	bIsDead = true;
+	bIsCarryForwardActive = false;
 
 	UE_LOG(
 		LogTemp,
@@ -232,18 +279,14 @@ void AEnemyCharacter::HandleEnemyDeath(UHealthComponent* HealthComp, AActor* Ins
 	SetActorTickEnabled(false);
 }
 
-void AEnemyCharacter::HandleEnemyHealthChanged(
-	UHealthComponent* HealthComp,
-	float NewHealth,
-	float Delta,
-	AActor* InstigatorActor
-)
+void AEnemyCharacter::HandleEnemyHealthChanged(UHealthComponent* HealthComp, float NewHealth, float Delta, AActor* InstigatorActor)
 {
 	if (bIsDead)
 	{
 		return;
 	}
 
+	// Ignore heal events for hit reaction.
 	if (Delta >= 0.f)
 	{
 		return;
@@ -259,16 +302,62 @@ void AEnemyCharacter::HandleEnemyHealthChanged(
 		);
 	}
 
-	if (!InstigatorActor)
+	// Only react if combat code prepared hit reaction data.
+	if (!bHasPendingHitReaction)
 	{
 		return;
 	}
 
-	const FVector Direction = (GetActorLocation() - InstigatorActor->GetActorLocation()).GetSafeNormal();
-	const float KnockbackStrength = 400.f;
-
 	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
 	{
-		MoveComp->AddImpulse(Direction * KnockbackStrength, true);
+		switch (PendingReactionType)
+		{
+		case EHitReactionType::Knockback:
+		{
+			// Standard push away from attacker
+			MoveComp->AddImpulse(PendingHitReactionDirection * PendingKnockbackStrength, true);
+			break;
+		}
+
+		case EHitReactionType::Launch:
+		{
+			// Launch character upward (used for uppercuts / air combat)
+			const FVector LaunchVelocity =
+				PendingHitReactionDirection * PendingKnockbackStrength +
+				FVector(0.f, 0.f, PendingLaunchStrength);
+
+			LaunchCharacter(LaunchVelocity, true, true);
+			break;
+		}
+
+		case EHitReactionType::CarryForward:
+		{
+			// Carry the target forward for a short controlled duration.
+			bIsCarryForwardActive = true;
+			ActiveCarryDirection = PendingHitReactionDirection;
+			ActiveCarrySpeed = PendingCarrySpeed;
+			ActiveCarryTimeRemaining = PendingCarryDuration;
+
+			if (AAIController* AIController = Cast<AAIController>(GetController()))
+			{
+				AIController->StopMovement();
+			}
+
+			MoveComp->StopMovementImmediately();
+			break;
+		}
+
+		default:
+			break;
+		}
 	}
+
+	// Consume cached data after the reaction was used once.
+	bHasPendingHitReaction = false;
+	PendingReactionType = EHitReactionType::None;
+	PendingHitReactionDirection = FVector::ZeroVector;
+	PendingKnockbackStrength = 0.f;
+	PendingLaunchStrength = 0.f;
+	PendingCarrySpeed = 0.f;
+	PendingCarryDuration = 0.f;
 }

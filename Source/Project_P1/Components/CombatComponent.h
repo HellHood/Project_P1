@@ -11,6 +11,15 @@ enum class EAttackInputType : uint8
 	Heavy
 };
 
+UENUM(BlueprintType)
+enum class EHitReactionType : uint8
+{
+	None,
+	Knockback,
+	Launch,
+	CarryForward
+};
+
 USTRUCT(BlueprintType)
 struct FAttackTransition
 {
@@ -67,6 +76,26 @@ struct FAttackData
 	// Cooldown applied when the attack starts.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
 	float Cooldown = 0.25f;
+
+	// Movement reaction type applied to hit targets.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack|HitReaction")
+	EHitReactionType HitReactionType = EHitReactionType::Knockback;
+
+	// Horizontal reaction strength used for knockback and launch.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack|HitReaction")
+	float KnockbackStrength = 400.f;
+
+	// Vertical reaction strength used by launch attacks.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack|HitReaction")
+	float LaunchStrength = 0.f;
+
+	// Speed used while carrying the target forward.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack|HitReaction")
+	float CarrySpeed = 0.f;
+
+	// Duration of the carry forward reaction.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack|HitReaction")
+	float CarryDuration = 0.f;
 
 	// Allowed follow-up transitions from this attack.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
@@ -140,7 +169,8 @@ private:
 
 	void ResetAttackCooldown();
 
-	bool TraceCurrentAttack(FHitResult& OutHit) const;
+	// Collect all hit results for the current attack sweep.
+	bool TraceCurrentAttack(TArray<FHitResult>& OutHits) const;
 	bool ResolveDefaultAttackData(EAttackInputType InputType, FAttackData& OutAttackData) const;
 	bool ResolveTransitionAttack(EAttackInputType InputType, float InputTime, FAttackData& OutAttackData) const;
 	bool ResolveAttackById(FName AttackId, FAttackData& OutAttackData) const;

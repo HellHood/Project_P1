@@ -1,6 +1,7 @@
 #include "CombatComponent.h"
 
 #include "../Components/HealthComponent.h"
+#include "../Characters/EnemyCharacter.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
@@ -24,7 +25,6 @@ void UCombatComponent::BeginPlay()
 
 bool UCombatComponent::RequestAttack(EAttackInputType InputType)
 {
-	// If an attack is already active, store the input for transition resolution.
 	if (bIsAttacking)
 	{
 		bHasBufferedAttack = true;
@@ -106,8 +106,8 @@ void UCombatComponent::BeginAttack(const FAttackData& AttackData)
 
 void UCombatComponent::ExecuteCurrentAttackHit()
 {
-	FHitResult Hit;
-	const bool bHit = TraceCurrentAttack(Hit);
+	TArray<FHitResult> Hits;
+	const bool bHit = TraceCurrentAttack(Hits);
 
 	if (!bHit)
 	{
@@ -115,27 +115,14 @@ void UCombatComponent::ExecuteCurrentAttackHit()
 		return;
 	}
 
-	AActor* HitActor = Hit.GetActor();
-	if (!HitActor)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[Combat] Hit result had no actor"));
-		return;
-	}
-
-	UHealthComponent* HealthComp = HitActor->FindComponentByClass<UHealthComponent>();
-	if (!HealthComp)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[Combat] Hit ignored: %s has no HealthComponent"), *HitActor->GetName());
-		return;
-	}
-
-	if (HealthComp->IsDead())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[Combat] Hit ignored: %s is already dead"), *HitActor->GetName());
-		return;
-	}
-
 	AActor* OwnerActor = GetOwner();
+	if (!OwnerActor)
+	{
+		return;
+	}
+
+	const FVector OwnerLocation = OwnerActor->GetActorLocation();
+	const FVector OwnerForward = OwnerActor->GetActorForwardVector();
 
 	AController* InstigatorController = nullptr;
 	if (const APawn* OwnerPawn = Cast<APawn>(OwnerActor))
@@ -143,15 +130,120 @@ void UCombatComponent::ExecuteCurrentAttackHit()
 		InstigatorController = OwnerPawn->GetController();
 	}
 
-	UGameplayStatics::ApplyDamage(
-		HitActor,
-		CurrentAttackData.Damage,
-		InstigatorController,
-		OwnerActor,
-		UDamageType::StaticClass()
-	);
+	// Prevent multiple damage applications to the same actor from one sweep.
+	TSet<AActor*> UniqueActors;
+	TArray<AActor*> ValidTargets;
 
-	UE_LOG(LogTemp, Warning, TEXT("[Combat] Hit confirmed: %s"), *HitActor->GetName());
+	for (const FHitResult& Hit : Hits)
+	{
+		AActor* HitActor = Hit.GetActor();
+		if (!HitActor)
+		{
+			continue;
+		}
+
+		if (UniqueActors.Contains(HitActor))
+		{
+			continue;
+		}
+
+		UniqueActors.Add(HitActor);
+
+		UHealthComponent* HealthComp = HitActor->FindComponentByClass<UHealthComponent>();
+		if (!HealthComp)
+		{
+			continue;
+		}
+
+		if (HealthComp->IsDead())
+		{
+			continue;
+		}
+
+		// Keep only unique, alive actors that can actually receive damage.
+		ValidTargets.Add(HitActor);
+	}
+
+	if (ValidTargets.IsEmpty())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Combat] Hit missed"));
+		return;
+	}
+
+	// Choose the target that feels most natural for the current swing.
+	// Forward alignment is weighted more than distance, but closer targets still gain score.
+	AActor* PrimaryTarget = nullptr;
+	float BestScore = -9999.f;
+
+	for (AActor* TargetActor : ValidTargets)
+	{
+		const FVector ToTarget = TargetActor->GetActorLocation() - OwnerLocation;
+		const float Distance = ToTarget.Size();
+		const FVector Direction = ToTarget.GetSafeNormal();
+
+		// Higher dot means the target is more in front of the attacker.
+		const float Dot = FVector::DotProduct(OwnerForward, Direction);
+
+		// Normalize distance inside attack range.
+		// 1.0 = very close, 0.0 = near the end of the sweep range.
+		const float DistanceScore = 1.0f - FMath::Clamp(Distance / CurrentAttackData.Range, 0.f, 1.f);
+
+		// Final score for primary target selection.
+		// Direction matters more than distance.
+		const float Score = (Dot * 0.7f) + (DistanceScore * 0.3f);
+
+		if (Score > BestScore)
+		{
+			BestScore = Score;
+			PrimaryTarget = TargetActor;
+		}
+	}
+
+	// Primary target gets stronger feedback than secondary targets.
+	const float PrimaryReactionMultiplier = 1.0f;
+	const float SecondaryReactionMultiplier = 0.5f;
+
+	for (AActor* TargetActor : ValidTargets)
+	{
+		const FVector HitDirection = (TargetActor->GetActorLocation() - OwnerLocation).GetSafeNormal();
+		const float ReactionMultiplier =
+			TargetActor == PrimaryTarget ? PrimaryReactionMultiplier : SecondaryReactionMultiplier;
+
+		const float KnockbackStrength = CurrentAttackData.KnockbackStrength * ReactionMultiplier;
+		const float LaunchStrength = CurrentAttackData.LaunchStrength * ReactionMultiplier;
+		const float CarrySpeed = CurrentAttackData.CarrySpeed * ReactionMultiplier;
+		const float CarryDuration = CurrentAttackData.CarryDuration;
+
+		// Cache hit reaction data before damage is applied.
+		// Enemy consumes this data when HealthComponent confirms the hit.
+		if (AEnemyCharacter* EnemyCharacter = Cast<AEnemyCharacter>(TargetActor))
+		{
+			EnemyCharacter->SetPendingHitReaction(
+				CurrentAttackData.HitReactionType,
+				HitDirection,
+				KnockbackStrength,
+				LaunchStrength,
+				CarrySpeed,
+				CarryDuration
+			);
+		}
+
+		UGameplayStatics::ApplyDamage(
+			TargetActor,
+			CurrentAttackData.Damage,
+			InstigatorController,
+			OwnerActor,
+			UDamageType::StaticClass()
+		);
+
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[Combat] Hit confirmed: %s Primary=%d"),
+			*TargetActor->GetName(),
+			TargetActor == PrimaryTarget ? 1 : 0
+		);
+	}
 }
 
 void UCombatComponent::EndAttack()
@@ -191,7 +283,7 @@ void UCombatComponent::ResetAttackCooldown()
 	GetWorld()->GetTimerManager().ClearTimer(AttackCooldownHandle);
 }
 
-bool UCombatComponent::TraceCurrentAttack(FHitResult& OutHit) const
+bool UCombatComponent::TraceCurrentAttack(TArray<FHitResult>& OutHits) const
 {
 	const AActor* OwnerActor = GetOwner();
 	if (!OwnerActor)
@@ -212,8 +304,8 @@ bool UCombatComponent::TraceCurrentAttack(FHitResult& OutHit) const
 	FCollisionQueryParams Params;
 	Params.AddIgnoredActor(OwnerActor);
 
-	const bool bHit = World->SweepSingleByChannel(
-		OutHit,
+	const bool bHit = World->SweepMultiByChannel(
+		OutHits,
 		Start,
 		End,
 		FQuat::Identity,

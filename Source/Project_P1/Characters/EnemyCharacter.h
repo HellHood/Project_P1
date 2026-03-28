@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "BaseCharacter.h"
+#include "../Components/CombatComponent.h"
 #include "EnemyCharacter.generated.h"
 
 class UHealthComponent;
@@ -13,6 +14,16 @@ class PROJECT_P1_API AEnemyCharacter : public ABaseCharacter
 
 public:
 	AEnemyCharacter();
+
+	// Cache hit reaction data before damage is applied.
+	void SetPendingHitReaction(
+		EHitReactionType ReactionType,
+		const FVector& Direction,
+		float KnockbackStrength,
+		float LaunchStrength,
+		float CarrySpeed,
+		float CarryDuration
+	);
 
 protected:
 	virtual void BeginPlay() override;
@@ -48,6 +59,21 @@ private:
 
 	bool bAttackOnCooldown = false;
 	bool bIsDead = false;
+
+	// Store hit reaction until HealthComponent confirms damage.
+	bool bHasPendingHitReaction = false;
+	EHitReactionType PendingReactionType = EHitReactionType::None;
+	FVector PendingHitReactionDirection = FVector::ZeroVector;
+	float PendingKnockbackStrength = 0.f;
+	float PendingLaunchStrength = 0.f;
+	float PendingCarrySpeed = 0.f;
+	float PendingCarryDuration = 0.f;
+
+	// Active carry forward state
+	bool bIsCarryForwardActive = false;
+	FVector ActiveCarryDirection = FVector::ZeroVector;
+	float ActiveCarrySpeed = 0.f;
+	float ActiveCarryTimeRemaining = 0.f;
 
 	FTimerHandle AttackCooldownHandle;
 	FTimerHandle RepathHandle;
