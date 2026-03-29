@@ -4,8 +4,10 @@
 #include "BaseCharacter.h"
 #include "InputActionValue.h"
 #include "TimerManager.h"
+#include "../Components/TargetingComponent.h"
 #include "PlayerCharacter.generated.h"
 
+class UTargetingComponent;
 class UCameraComponent;
 class UHealthComponent;
 class UInputAction;
@@ -30,6 +32,13 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera")
 	UCameraComponent* Camera;
+	
+	// Targeting system component (handles lock-on logic)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Targeting")
+	UTargetingComponent* TargetingComponent;
+	
+	UPROPERTY(EditDefaultsOnly, Category="Targeting")
+	float LockOnRotationSpeed = 12.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input")
 	UInputMappingContext* DefaultMappingContext;
@@ -51,6 +60,9 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input")
 	UInputAction* HeavyAttackAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input")
+	UInputAction* LockOnAction;
 
 	// Temporary visual weapon mesh attached to the player.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Weapon")
@@ -76,7 +88,7 @@ protected:
 
 	UFUNCTION(BlueprintCallable, Category="Dash")
 	bool CanDash() const;
-
+		
 	UFUNCTION()
 	void HandlePlayerDeath(UHealthComponent* HealthComp, AActor* InstigatorActor);
 
@@ -86,6 +98,8 @@ protected:
 	void OnJumpReleased();
 	void StartLightAttack();
 	void StartHeavyAttack();
+	void OnLockOnPressed();
+	void UpdateLockOnRotation(float DeltaSeconds);
 
 private:
 	virtual void Tick(float DeltaSeconds) override;

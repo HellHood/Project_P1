@@ -1,7 +1,9 @@
 #include "PlayerCharacter.h"
 
 #include "../Components/CombatComponent.h"
+#include "../Components/TargetingComponent.h"
 #include "../Core/BaseGameMode.h"
+#include "EnemyCharacter.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -41,7 +43,9 @@ APlayerCharacter::APlayerCharacter()
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(SpringArm, USpringArmComponent::SocketName);
 	Camera->bUsePawnControlRotation = false;
-
+	
+	TargetingComponent = CreateDefaultSubobject<UTargetingComponent>(TEXT("TargetingComponent"));
+	
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
 	bUseControllerRotationRoll = false;
@@ -167,6 +171,15 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 	{
 		UE_LOG(LogTemp, Warning, TEXT("HeavyAttackAction is NOT set on %s"), *GetName());
 	}
+
+	if (LockOnAction)
+	{
+		EnhancedInput->BindAction(LockOnAction, ETriggerEvent::Started, this, &APlayerCharacter::OnLockOnPressed);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("LockOnAction is NOT set on %s"), *GetName());
+	}
 }
 
 void APlayerCharacter::Move(const FInputActionValue& Value)
@@ -231,6 +244,16 @@ void APlayerCharacter::StartHeavyAttack()
 	}
 }
 
+void APlayerCharacter::OnLockOnPressed()
+{
+	if (!TargetingComponent)
+	{
+		return;
+	}
+
+	TargetingComponent->ToggleLockOn();
+}
+
 void APlayerCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -251,6 +274,11 @@ void APlayerCharacter::Tick(float DeltaSeconds)
 			bFalling ? 1 : 0,
 			bIsDashing ? 1 : 0
 		);
+	}
+	
+	if (TargetingComponent && TargetingComponent->IsLockedOn())
+	{
+		UpdateLockOnRotation(DeltaSeconds);
 	}
 }
 
@@ -372,6 +400,40 @@ FVector APlayerCharacter::GetDashDirection() const
 
 	const FVector Forward = GetActorForwardVector();
 	return FVector(Forward.X, Forward.Y, 0.0f).GetSafeNormal();
+}
+
+void APlayerCharacter::UpdateLockOnRotation(float DeltaSeconds)
+{
+	if (!TargetingComponent)
+	{
+		return;
+	}
+
+	AActor* CurrentTarget = TargetingComponent->GetCurrentTarget();
+	if (!CurrentTarget)
+	{
+		return;
+	}
+
+	const FVector ToTarget = CurrentTarget->GetActorLocation() - GetActorLocation();
+	const FVector FlatDirection(ToTarget.X, ToTarget.Y, 0.f);
+
+	if (FlatDirection.IsNearlyZero())
+	{
+		return;
+	}
+
+	const FRotator CurrentRotation = GetActorRotation();
+	const FRotator TargetRotation = FlatDirection.Rotation();
+
+	const FRotator NewRotation = FMath::RInterpTo(
+		CurrentRotation,
+		TargetRotation,
+		DeltaSeconds,
+		LockOnRotationSpeed
+	);
+
+	SetActorRotation(FRotator(0.f, NewRotation.Yaw, 0.f));
 }
 
 void APlayerCharacter::HandlePlayerDeath(UHealthComponent* HealthComp, AActor* InstigatorActor)
