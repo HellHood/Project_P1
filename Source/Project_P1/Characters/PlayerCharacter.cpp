@@ -43,9 +43,9 @@ APlayerCharacter::APlayerCharacter()
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(SpringArm, USpringArmComponent::SocketName);
 	Camera->bUsePawnControlRotation = false;
-	
+
 	TargetingComponent = CreateDefaultSubobject<UTargetingComponent>(TEXT("TargetingComponent"));
-	
+
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
 	bUseControllerRotationRoll = false;
@@ -180,6 +180,24 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 	{
 		UE_LOG(LogTemp, Warning, TEXT("LockOnAction is NOT set on %s"), *GetName());
 	}
+
+	if (SwitchTargetLeftAction)
+	{
+		EnhancedInput->BindAction(SwitchTargetLeftAction, ETriggerEvent::Started, this, &APlayerCharacter::OnSwitchTargetLeftPressed);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SwitchTargetLeftAction is NOT set on %s"), *GetName());
+	}
+
+	if (SwitchTargetRightAction)
+	{
+		EnhancedInput->BindAction(SwitchTargetRightAction, ETriggerEvent::Started, this, &APlayerCharacter::OnSwitchTargetRightPressed);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SwitchTargetRightAction is NOT set on %s"), *GetName());
+	}
 }
 
 void APlayerCharacter::Move(const FInputActionValue& Value)
@@ -254,6 +272,26 @@ void APlayerCharacter::OnLockOnPressed()
 	TargetingComponent->ToggleLockOn();
 }
 
+void APlayerCharacter::OnSwitchTargetLeftPressed()
+{
+	if (!TargetingComponent)
+	{
+		return;
+	}
+
+	TargetingComponent->SwitchTargetLeft();
+}
+
+void APlayerCharacter::OnSwitchTargetRightPressed()
+{
+	if (!TargetingComponent)
+	{
+		return;
+	}
+
+	TargetingComponent->SwitchTargetRight();
+}
+
 void APlayerCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -261,6 +299,14 @@ void APlayerCharacter::Tick(float DeltaSeconds)
 	if (bIsDashing)
 	{
 		HandleDash(DeltaSeconds);
+	}
+
+	UpdateMovementRotationMode();
+
+	if (TargetingComponent && TargetingComponent->IsLockedOn())
+	{
+		UpdateLockOnRotation(DeltaSeconds);
+		UpdateLockOnCamera(DeltaSeconds);
 	}
 
 	if (GMovementDebug != 0)
@@ -274,11 +320,6 @@ void APlayerCharacter::Tick(float DeltaSeconds)
 			bFalling ? 1 : 0,
 			bIsDashing ? 1 : 0
 		);
-	}
-	
-	if (TargetingComponent && TargetingComponent->IsLockedOn())
-	{
-		UpdateLockOnRotation(DeltaSeconds);
 	}
 }
 
@@ -409,7 +450,7 @@ void APlayerCharacter::UpdateLockOnRotation(float DeltaSeconds)
 		return;
 	}
 
-	AActor* CurrentTarget = TargetingComponent->GetCurrentTarget();
+	AEnemyCharacter* CurrentTarget = TargetingComponent->GetCurrentTarget();
 	if (!CurrentTarget)
 	{
 		return;
@@ -434,6 +475,62 @@ void APlayerCharacter::UpdateLockOnRotation(float DeltaSeconds)
 	);
 
 	SetActorRotation(FRotator(0.f, NewRotation.Yaw, 0.f));
+}
+
+void APlayerCharacter::UpdateLockOnCamera(float DeltaSeconds)
+{
+	if (!TargetingComponent || !Controller)
+	{
+		return;
+	}
+
+	AEnemyCharacter* CurrentTarget = TargetingComponent->GetCurrentTarget();
+	if (!CurrentTarget)
+	{
+		return;
+	}
+
+	const FVector ToTarget = CurrentTarget->GetActorLocation() - GetActorLocation();
+	const FVector FlatDirection(ToTarget.X, ToTarget.Y, 0.f);
+
+	if (FlatDirection.IsNearlyZero())
+	{
+		return;
+	}
+
+	const FRotator CurrentControlRotation = Controller->GetControlRotation();
+	const FRotator DesiredYawRotation = FlatDirection.Rotation();
+	const FRotator TargetControlRotation(
+		CurrentControlRotation.Pitch,
+		DesiredYawRotation.Yaw,
+		CurrentControlRotation.Roll
+	);
+
+	const FRotator NewControlRotation = FMath::RInterpTo(
+		CurrentControlRotation,
+		TargetControlRotation,
+		DeltaSeconds,
+		LockOnCameraRotationSpeed
+	);
+
+	Controller->SetControlRotation(NewControlRotation);
+}
+
+void APlayerCharacter::UpdateMovementRotationMode()
+{
+	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
+	if (!MoveComp)
+	{
+		return;
+	}
+
+	const bool bShouldUseLockOnRotation =
+		TargetingComponent &&
+		TargetingComponent->IsLockedOn();
+
+	// Free movement rotates the character into movement direction.
+	// Lock-on keeps the character facing the current target instead.
+	MoveComp->bOrientRotationToMovement = !bShouldUseLockOnRotation;
 }
 
 void APlayerCharacter::HandlePlayerDeath(UHealthComponent* HealthComp, AActor* InstigatorActor)

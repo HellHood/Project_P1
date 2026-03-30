@@ -20,6 +20,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Targeting")
 	void ClearTarget();
 
+	UFUNCTION(BlueprintCallable, Category="Targeting")
+	void SwitchTargetLeft();
+
+	UFUNCTION(BlueprintCallable, Category="Targeting")
+	void SwitchTargetRight();
+
 	UFUNCTION(BlueprintPure, Category="Targeting")
 	bool IsLockedOn() const { return CurrentTarget != nullptr; }
 
@@ -44,5 +50,7 @@ private:
 	AEnemyCharacter* CurrentTarget = nullptr;
 
 	AEnemyCharacter* FindBestTarget() const;
+	AEnemyCharacter* FindSideTarget(bool bSearchLeft) const;
 	bool IsTargetValid(const AEnemyCharacter* Target) const;
+	FVector GetTargetingForward() const;
 };

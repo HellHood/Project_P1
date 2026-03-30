@@ -40,6 +40,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Targeting")
 	float LockOnRotationSpeed = 12.0f;
 
+	UPROPERTY(EditDefaultsOnly, Category="Targeting")
+	float LockOnCameraRotationSpeed = 10.0f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input")
 	UInputMappingContext* DefaultMappingContext;
 
@@ -63,6 +66,12 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input")
 	UInputAction* LockOnAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input")
+	UInputAction* SwitchTargetLeftAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input")
+	UInputAction* SwitchTargetRightAction;
 
 	// Temporary visual weapon mesh attached to the player.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Weapon")
@@ -99,7 +108,11 @@ protected:
 	void StartLightAttack();
 	void StartHeavyAttack();
 	void OnLockOnPressed();
+	void OnSwitchTargetLeftPressed();
+	void OnSwitchTargetRightPressed();
 	void UpdateLockOnRotation(float DeltaSeconds);
+	void UpdateLockOnCamera(float DeltaSeconds);
+	void UpdateMovementRotationMode();
 
 private:
 	virtual void Tick(float DeltaSeconds) override;
