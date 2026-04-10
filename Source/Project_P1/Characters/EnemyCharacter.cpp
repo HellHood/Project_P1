@@ -361,3 +361,32 @@ void AEnemyCharacter::HandleEnemyHealthChanged(UHealthComponent* HealthComp, flo
 	PendingCarrySpeed = 0.f;
 	PendingCarryDuration = 0.f;
 }
+
+void AEnemyCharacter::DeactivateEnemy()
+{
+	// Disable tick so no AI / logic runs.
+	SetActorTickEnabled(false);
+
+	// Stop movement and disable it.
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		MoveComp->StopMovementImmediately();
+		MoveComp->DisableMovement();
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[Enemy] Deactivated: %s"), *GetName());
+}
+
+void AEnemyCharacter::ActivateEnemy()
+{
+	// Enable tick again.
+	SetActorTickEnabled(true);
+
+	// Restore movement.
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		MoveComp->SetMovementMode(EMovementMode::MOVE_Walking);
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[Enemy] Activated: %s"), *GetName());
+}

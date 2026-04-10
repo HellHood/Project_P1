@@ -24,6 +24,12 @@ public:
 		float CarrySpeed,
 		float CarryDuration
 	);
+	
+		// Enables full enemy behavior (movement, logic, attacking).
+	void ActivateEnemy();
+
+	// Disables enemy behavior before encounter start.
+	void DeactivateEnemy();
 
 protected:
 	virtual void BeginPlay() override;

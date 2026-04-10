@@ -22,6 +22,7 @@ class PROJECT_P1_API APlayerCharacter : public ABaseCharacter
 
 public:
 	APlayerCharacter();
+	
 
 protected:
 	virtual void BeginPlay() override;
@@ -76,6 +77,9 @@ protected:
 	// Temporary visual weapon mesh attached to the player.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Weapon")
 	UStaticMeshComponent* WeaponMesh;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon")
+	FName WeaponSocketName = TEXT("weapon_socket");
 
 	UPROPERTY(EditDefaultsOnly, Category="Dash")
 	float DashSpeed = 1800.0f;
@@ -97,7 +101,10 @@ protected:
 
 	UFUNCTION(BlueprintCallable, Category="Dash")
 	bool CanDash() const;
-		
+	
+	UFUNCTION(BlueprintCallable, Category="Animation")
+	bool ConsumeJumpStartTrigger();
+	
 	UFUNCTION()
 	void HandlePlayerDeath(UHealthComponent* HealthComp, AActor* InstigatorActor);
 
@@ -134,4 +141,6 @@ private:
 	bool bDashSavedJumpCountValid = false;
 
 	FVector DashDirection = FVector::ZeroVector;
+	
+	bool bJumpStartTriggered = false;
 };

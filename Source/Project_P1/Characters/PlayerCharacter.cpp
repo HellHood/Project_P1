@@ -50,9 +50,10 @@ APlayerCharacter::APlayerCharacter()
 	bUseControllerRotationYaw = false;
 	bUseControllerRotationRoll = false;
 
-	// Temporary weapon mesh for early gameplay testing.
+	// // Temporary weapon mesh for early gameplay testing.
 	WeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMesh"));
-	WeaponMesh->SetupAttachment(GetMesh(), TEXT("hand_r"));
+	WeaponMesh->SetupAttachment(GetMesh());
+	WeaponMesh->SetMobility(EComponentMobility::Movable);
 	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	WeaponMesh->SetGenerateOverlapEvents(false);
 
@@ -76,7 +77,18 @@ APlayerCharacter::APlayerCharacter()
 void APlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	if (GetMesh())
+	{
+		const bool bHasSocket = GetMesh()->DoesSocketExist(TEXT("weapon_socket"));
+		UE_LOG(LogTemp, Warning, TEXT("[Weapon] Does socket exist: %s"), bHasSocket ? TEXT("YES") : TEXT("NO"));
+	}
+	if (GetMesh())
+	{
+		const FTransform SocketTransform = GetMesh()->GetSocketTransform(TEXT("weapon_socket"), RTS_World);
+		UE_LOG(LogTemp, Warning, TEXT("[Weapon] Socket world location: %s"), *SocketTransform.GetLocation().ToString());
+	}
 
+	
 	if (APlayerController* PC = Cast<APlayerController>(Controller))
 	{
 		if (ULocalPlayer* LP = PC->GetLocalPlayer())
@@ -103,6 +115,25 @@ void APlayerCharacter::BeginPlay()
 	else
 	{
 		UE_LOG(LogTemp, Error, TEXT("No HealthComponent on %s"), *GetName());
+	}
+	
+	if (WeaponMesh && GetMesh())
+	{
+		const bool bAttached = WeaponMesh->AttachToComponent(
+			GetMesh(),
+			FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+			WeaponSocketName
+		);
+
+		WeaponMesh->SetRelativeLocation(FVector::ZeroVector);
+		WeaponMesh->SetRelativeRotation(FRotator::ZeroRotator);
+		WeaponMesh->SetRelativeScale3D(FVector::OneVector);
+
+		UE_LOG(LogTemp, Warning, TEXT("[Weapon] Attach result: %s"), bAttached ? TEXT("YES") : TEXT("NO"));
+		UE_LOG(LogTemp, Warning, TEXT("[Weapon] Attach Parent: %s"),
+			WeaponMesh->GetAttachParent() ? *WeaponMesh->GetAttachParent()->GetName() : TEXT("None"));
+		UE_LOG(LogTemp, Warning, TEXT("[Weapon] Attach Socket: %s"),
+			*WeaponMesh->GetAttachSocketName().ToString());
 	}
 }
 
@@ -227,7 +258,17 @@ void APlayerCharacter::Look(const FInputActionValue& Value)
 {
 	const FVector2D InputValue = Value.Get<FVector2D>();
 
-	AddControllerYawInput(InputValue.X);
+	const bool bIsLockedOn =
+		TargetingComponent &&
+		TargetingComponent->IsLockedOn();
+
+	// During lock-on, camera yaw is controlled by target tracking.
+	// Keep manual pitch so the player can still adjust vertical view slightly.
+	if (!bIsLockedOn)
+	{
+		AddControllerYawInput(InputValue.X);
+	}
+
 	AddControllerPitchInput(InputValue.Y);
 }
 
@@ -239,6 +280,7 @@ void APlayerCharacter::OnJumpPressed()
 	}
 
 	Jump();
+	bJumpStartTriggered = true;
 }
 
 void APlayerCharacter::OnJumpReleased()
@@ -557,4 +599,15 @@ void APlayerCharacter::HandlePlayerDeath(UHealthComponent* HealthComp, AActor* I
 	{
 		GameMode->HandlePlayerDeath();
 	}
+}
+
+bool APlayerCharacter::ConsumeJumpStartTrigger()
+{
+	if (!bJumpStartTriggered)
+	{
+		return false;
+	}
+
+	bJumpStartTriggered = false;
+	return true;
 }
