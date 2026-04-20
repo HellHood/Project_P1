@@ -4,6 +4,8 @@
 #include "../Components/TargetingComponent.h"
 #include "../Core/BaseGameMode.h"
 #include "EnemyCharacter.h"
+#include "Animation/AnimMontage.h"
+#include "Blueprint/UserWidget.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -16,6 +18,8 @@
 #include "Project_P1/Components/HealthComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/LocalPlayer.h"
+#include "Misc/OutputDeviceNull.h"
+#include "../Components/StyleComponent.h"
 
 static int32 GMovementDebug = 0;
 static FAutoConsoleVariableRef CVarMovementDebug(
@@ -45,12 +49,13 @@ APlayerCharacter::APlayerCharacter()
 	Camera->bUsePawnControlRotation = false;
 
 	TargetingComponent = CreateDefaultSubobject<UTargetingComponent>(TEXT("TargetingComponent"));
-
+	StyleComponent = CreateDefaultSubobject<UStyleComponent>(TEXT("StyleComponent"));
+	
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
 	bUseControllerRotationRoll = false;
 
-	// // Temporary weapon mesh for early gameplay testing.
+	// Temporary weapon mesh for early gameplay testing.
 	WeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMesh"));
 	WeaponMesh->SetupAttachment(GetMesh());
 	WeaponMesh->SetMobility(EComponentMobility::Movable);
@@ -77,18 +82,19 @@ APlayerCharacter::APlayerCharacter()
 void APlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
 	if (GetMesh())
 	{
 		const bool bHasSocket = GetMesh()->DoesSocketExist(TEXT("weapon_socket"));
 		UE_LOG(LogTemp, Warning, TEXT("[Weapon] Does socket exist: %s"), bHasSocket ? TEXT("YES") : TEXT("NO"));
 	}
+
 	if (GetMesh())
 	{
 		const FTransform SocketTransform = GetMesh()->GetSocketTransform(TEXT("weapon_socket"), RTS_World);
 		UE_LOG(LogTemp, Warning, TEXT("[Weapon] Socket world location: %s"), *SocketTransform.GetLocation().ToString());
 	}
 
-	
 	if (APlayerController* PC = Cast<APlayerController>(Controller))
 	{
 		if (ULocalPlayer* LP = PC->GetLocalPlayer())
@@ -111,10 +117,31 @@ void APlayerCharacter::BeginPlay()
 	if (UHealthComponent* HealthComp = GetHealthComponent())
 	{
 		HealthComp->OnDeath.AddDynamic(this, &APlayerCharacter::HandlePlayerDeath);
+		HealthComp->OnHealthChanged.AddDynamic(this, &APlayerCharacter::HandlePlayerHealthChanged);
 	}
 	else
 	{
 		UE_LOG(LogTemp, Error, TEXT("No HealthComponent on %s"), *GetName());
+	}
+
+	if (UCombatComponent* CombatComp = GetCombatComponent())
+	{
+		CombatComp->OnAttackStarted.AddDynamic(this, &APlayerCharacter::HandleAttackStarted);
+	}
+
+	if (PlayerHUDWidgetClass)
+	{
+		PlayerHUDWidget = CreateWidget<UUserWidget>(GetWorld(), PlayerHUDWidgetClass);
+
+		if (PlayerHUDWidget)
+		{
+			PlayerHUDWidget->AddToViewport();
+			UpdatePlayerHUD();
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("PlayerHUDWidgetClass is NOT set on %s"), *GetName());
 	}
 	
 	if (WeaponMesh && GetMesh())
@@ -610,4 +637,50 @@ bool APlayerCharacter::ConsumeJumpStartTrigger()
 
 	bJumpStartTriggered = false;
 	return true;
+}
+
+void APlayerCharacter::HandleAttackStarted(FAttackData AttackData)
+{
+	if (!AttackData.AttackMontage)
+	{
+		return;
+	}
+
+	PlayAnimMontage(AttackData.AttackMontage);
+}
+
+void APlayerCharacter::HandlePlayerHealthChanged(UHealthComponent* HealthComp, float NewHealth, float Delta, AActor* InstigatorActor)
+{
+	UpdatePlayerHUD();
+}
+
+void APlayerCharacter::UpdatePlayerHUD()
+{
+	if (!PlayerHUDWidget)
+	{
+		return;
+	}
+
+	UHealthComponent* HealthComp = GetHealthComponent();
+	if (!HealthComp)
+	{
+		return;
+	}
+
+	const float MaxHealth = HealthComp->GetMaxHealth();
+	if (MaxHealth <= 0.f)
+	{
+		return;
+	}
+
+	const float CurrentHealth = HealthComp->GetHealth();
+	const float HealthPercent = CurrentHealth / MaxHealth;
+
+	FOutputDeviceNull Ar;
+	PlayerHUDWidget->CallFunctionByNameWithArguments(
+		*FString::Printf(TEXT("SetHealthPercent %f"), HealthPercent),
+		Ar,
+		nullptr,
+		true
+	);
 }

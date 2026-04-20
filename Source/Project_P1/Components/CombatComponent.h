@@ -2,7 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "StyleComponent.h"
 #include "CombatComponent.generated.h"
+
+class UAnimMontage;
 
 UENUM(BlueprintType)
 enum class EAttackInputType : uint8
@@ -77,6 +80,10 @@ struct FAttackData
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
 	float Cooldown = 0.25f;
 
+	// Montage played when this attack starts.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack|Animation")
+	UAnimMontage* AttackMontage = nullptr;
+
 	// Movement reaction type applied to hit targets.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack|HitReaction")
 	EHitReactionType HitReactionType = EHitReactionType::Knockback;
@@ -100,7 +107,12 @@ struct FAttackData
 	// Allowed follow-up transitions from this attack.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
 	TArray<FAttackTransition> Transitions;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Style")
+	float BaseStyleValue = 10.0f;
 };
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAttackStartedSignature, FAttackData, AttackData);
 
 UCLASS(ClassGroup=(Project_P1), meta=(BlueprintSpawnableComponent))
 class PROJECT_P1_API UCombatComponent : public UActorComponent
@@ -116,6 +128,10 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Combat")
 	bool IsAttackOnCooldown() const { return bAttackOnCooldown; }
+
+	// Broadcast when an attack actually starts.
+	UPROPERTY(BlueprintAssignable, Category="Combat")
+	FOnAttackStartedSignature OnAttackStarted;
 
 protected:
 	virtual void BeginPlay() override;

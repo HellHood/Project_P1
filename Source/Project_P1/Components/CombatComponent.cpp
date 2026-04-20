@@ -1,6 +1,7 @@
 #include "CombatComponent.h"
 
 #include "../Components/HealthComponent.h"
+#include "../Components/StyleComponent.h"
 #include "../Characters/EnemyCharacter.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
@@ -64,6 +65,7 @@ bool UCombatComponent::RequestAttack(EAttackInputType InputType)
 void UCombatComponent::BeginAttack(const FAttackData& AttackData)
 {
 	CurrentAttackData = AttackData;
+	OnAttackStarted.Broadcast(CurrentAttackData);
 
 	bIsAttacking = true;
 	bAttackOnCooldown = true;
@@ -170,6 +172,15 @@ void UCombatComponent::ExecuteCurrentAttackHit()
 		return;
 	}
 
+	// Register style once per successful swing, not once per target.
+	if (UStyleComponent* StyleComp = OwnerActor->FindComponentByClass<UStyleComponent>())
+	{
+		StyleComp->RegisterAttackHit(
+			CurrentAttackData.AttackId,
+			CurrentAttackData.BaseStyleValue
+		);
+	}
+
 	// Choose the target that feels most natural for the current swing.
 	// Forward alignment is weighted more than distance, but closer targets still gain score.
 	AActor* PrimaryTarget = nullptr;
@@ -188,8 +199,7 @@ void UCombatComponent::ExecuteCurrentAttackHit()
 		// 1.0 = very close, 0.0 = near the end of the sweep range.
 		const float DistanceScore = 1.0f - FMath::Clamp(Distance / CurrentAttackData.Range, 0.f, 1.f);
 
-		// Final score for primary target selection.
-		// Direction matters more than distance.
+		// Favor forward alignment while still preferring closer targets.
 		const float Score = (Dot * 0.7f) + (DistanceScore * 0.3f);
 
 		if (Score > BestScore)
@@ -199,7 +209,6 @@ void UCombatComponent::ExecuteCurrentAttackHit()
 		}
 	}
 
-	// Primary target gets stronger feedback than secondary targets.
 	const float PrimaryReactionMultiplier = 1.0f;
 	const float SecondaryReactionMultiplier = 0.5f;
 
@@ -214,8 +223,6 @@ void UCombatComponent::ExecuteCurrentAttackHit()
 		const float CarrySpeed = CurrentAttackData.CarrySpeed * ReactionMultiplier;
 		const float CarryDuration = CurrentAttackData.CarryDuration;
 
-		// Cache hit reaction data before damage is applied.
-		// Enemy consumes this data when HealthComponent confirms the hit.
 		if (AEnemyCharacter* EnemyCharacter = Cast<AEnemyCharacter>(TargetActor))
 		{
 			EnemyCharacter->SetPendingHitReaction(

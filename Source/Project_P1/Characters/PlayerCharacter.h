@@ -5,6 +5,7 @@
 #include "InputActionValue.h"
 #include "TimerManager.h"
 #include "../Components/TargetingComponent.h"
+#include "../Components/CombatComponent.h"
 #include "PlayerCharacter.generated.h"
 
 class UTargetingComponent;
@@ -14,6 +15,8 @@ class UInputAction;
 class UInputMappingContext;
 class USpringArmComponent;
 class UStaticMeshComponent;
+class UUserWidget;
+class UStyleComponent;
 
 UCLASS()
 class PROJECT_P1_API APlayerCharacter : public ABaseCharacter
@@ -23,6 +26,8 @@ class PROJECT_P1_API APlayerCharacter : public ABaseCharacter
 public:
 	APlayerCharacter();
 	
+	UFUNCTION(BlueprintPure, Category="Components")
+	UStyleComponent* GetStyleComponent() const { return StyleComponent; }
 
 protected:
 	virtual void BeginPlay() override;
@@ -37,6 +42,9 @@ protected:
 	// Targeting system component (handles lock-on logic)
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Targeting")
 	UTargetingComponent* TargetingComponent;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+	UStyleComponent* StyleComponent = nullptr;
 	
 	UPROPERTY(EditDefaultsOnly, Category="Targeting")
 	float LockOnRotationSpeed = 12.0f;
@@ -81,6 +89,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon")
 	FName WeaponSocketName = TEXT("weapon_socket");
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI")
+	TSubclassOf<UUserWidget> PlayerHUDWidgetClass;
+
+	UPROPERTY()
+	UUserWidget* PlayerHUDWidget = nullptr;
+
 	UPROPERTY(EditDefaultsOnly, Category="Dash")
 	float DashSpeed = 1800.0f;
 
@@ -104,6 +118,12 @@ protected:
 	
 	UFUNCTION(BlueprintCallable, Category="Animation")
 	bool ConsumeJumpStartTrigger();
+
+	UFUNCTION()
+	void HandleAttackStarted(FAttackData AttackData);
+
+	UFUNCTION()
+	void HandlePlayerHealthChanged(UHealthComponent* HealthComp, float NewHealth, float Delta, AActor* InstigatorActor);
 	
 	UFUNCTION()
 	void HandlePlayerDeath(UHealthComponent* HealthComp, AActor* InstigatorActor);
@@ -120,6 +140,7 @@ protected:
 	void UpdateLockOnRotation(float DeltaSeconds);
 	void UpdateLockOnCamera(float DeltaSeconds);
 	void UpdateMovementRotationMode();
+	void UpdatePlayerHUD();
 
 private:
 	virtual void Tick(float DeltaSeconds) override;

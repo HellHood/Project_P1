@@ -11,9 +11,13 @@ AEnemyCharacter::AEnemyCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
+	bUseControllerRotationYaw = false;
+
 	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
 	{
 		MoveComp->MaxWalkSpeed = 450.f;
+		MoveComp->bOrientRotationToMovement = true;
+		MoveComp->RotationRate = FRotator(0.f, 720.f, 0.f);
 	}
 }
 
@@ -35,6 +39,11 @@ void AEnemyCharacter::BeginPlay()
 	{
 		HealthComp->OnDeath.AddDynamic(this, &AEnemyCharacter::HandleEnemyDeath);
 		HealthComp->OnHealthChanged.AddDynamic(this, &AEnemyCharacter::HandleEnemyHealthChanged);
+	}
+	
+	if (UCombatComponent* CombatComp = GetCombatComponent())
+	{
+		CombatComp->OnAttackStarted.AddDynamic(this, &AEnemyCharacter::HandleAttackStarted);
 	}
 }
 
@@ -204,13 +213,10 @@ void AEnemyCharacter::TryAttackTarget()
 
 	AController* InstigatorController = GetController();
 
-	UGameplayStatics::ApplyDamage(
-		TargetPawn,
-		AttackDamage,
-		InstigatorController,
-		this,
-		UDamageType::StaticClass()
-	);
+	if (UCombatComponent* CombatComp = GetCombatComponent())
+	{
+		CombatComp->RequestAttack((EAttackInputType::Light));
+	}
 
 	if (bDebugEnemy)
 	{
@@ -276,7 +282,6 @@ void AEnemyCharacter::HandleEnemyDeath(UHealthComponent* HealthComp, AActor* Ins
 		MoveComp->DisableMovement();
 	}
 
-	SetActorTickEnabled(false);
 }
 
 void AEnemyCharacter::HandleEnemyHealthChanged(UHealthComponent* HealthComp, float NewHealth, float Delta, AActor* InstigatorActor)
@@ -389,4 +394,25 @@ void AEnemyCharacter::ActivateEnemy()
 	}
 
 	UE_LOG(LogTemp, Warning, TEXT("[Enemy] Activated: %s"), *GetName());
+}
+
+void AEnemyCharacter::HandleAttackStarted(FAttackData AttackData)
+{
+	if (!AttackData.AttackMontage)
+	{
+		return;
+	}
+
+	PlayAnimMontage(AttackData.AttackMontage);
+}
+
+bool AEnemyCharacter::IsDead() const
+{
+	const UHealthComponent* HealthComp = GetHealthComponent();
+	if (!HealthComp)
+	{
+		return false;
+	}
+
+	return HealthComp->IsDead();
 }

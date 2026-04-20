@@ -58,6 +58,12 @@ protected:
 
 	UFUNCTION()
 	void HandleEnemyHealthChanged(UHealthComponent* HealthComp, float NewHealth, float Delta, AActor* InstigatorActor);
+	
+	UFUNCTION()
+	void HandleAttackStarted(FAttackData AttackData);
+	
+	UFUNCTION(BlueprintPure, Category="Enemy")
+	bool IsDead() const;
 
 private:
 	UPROPERTY()
