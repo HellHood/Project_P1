@@ -30,6 +30,10 @@ public:
 
 	// Disables enemy behavior before encounter start.
 	void DeactivateEnemy();
+	
+	UFUNCTION(BlueprintPure, Category="Enemy")
+	bool IsDead() const;
+	
 
 protected:
 	virtual void BeginPlay() override;
@@ -67,8 +71,7 @@ protected:
 	UFUNCTION()
 	void HandleAttackStarted(FAttackData AttackData);
 
-	UFUNCTION(BlueprintPure, Category="Enemy")
-	bool IsDead() const;
+
 
 private:
 	UPROPERTY()

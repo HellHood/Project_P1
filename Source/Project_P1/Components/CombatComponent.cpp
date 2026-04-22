@@ -498,3 +498,14 @@ bool UCombatComponent::ResolveAttackById(FName AttackId, FAttackData& OutAttackD
 
 	return AttackSet->FindAttackById(AttackId, OutAttackData);
 }
+
+void UCombatComponent::SetAttackSet(UAttackSetDataAsset* NewAttackSet)
+{
+	if (bIsAttacking)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Combat] AttackSet change blocked: attack in progress"));
+		return;
+	}
+
+	AttackSet = NewAttackSet;
+}

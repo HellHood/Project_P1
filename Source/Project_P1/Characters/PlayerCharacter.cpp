@@ -20,6 +20,8 @@
 #include "Engine/LocalPlayer.h"
 #include "Misc/OutputDeviceNull.h"
 #include "../Components/StyleComponent.h"
+#include "../Data/WeaponDataAsset.h"
+#include "../Data/AttackSetDataAsset.h"
 
 static int32 GMovementDebug = 0;
 static FAutoConsoleVariableRef CVarMovementDebug(
@@ -86,13 +88,10 @@ void APlayerCharacter::BeginPlay()
 
 	if (GetMesh())
 	{
-		const bool bHasSocket = GetMesh()->DoesSocketExist(TEXT("weapon_r"));
+		const bool bHasSocket = GetMesh()->DoesSocketExist(WeaponSocketName);
 		UE_LOG(LogTemp, Warning, TEXT("[Weapon] Does socket exist: %s"), bHasSocket ? TEXT("YES") : TEXT("NO"));
-	}
 
-	if (GetMesh())
-	{
-		const FTransform SocketTransform = GetMesh()->GetSocketTransform(TEXT("weapon_r"), RTS_World);
+		const FTransform SocketTransform = GetMesh()->GetSocketTransform(WeaponSocketName, RTS_World);
 		UE_LOG(LogTemp, Warning, TEXT("[Weapon] Socket world location: %s"), *SocketTransform.GetLocation().ToString());
 	}
 
@@ -156,12 +155,19 @@ void APlayerCharacter::BeginPlay()
 		WeaponMesh->SetRelativeLocation(FVector::ZeroVector);
 		WeaponMesh->SetRelativeRotation(FRotator::ZeroRotator);
 		WeaponMesh->SetRelativeScale3D(FVector::OneVector);
+		WeaponMesh->SetVisibility(true);
+		WeaponMesh->SetHiddenInGame(false);
 
 		UE_LOG(LogTemp, Warning, TEXT("[Weapon] Attach result: %s"), bAttached ? TEXT("YES") : TEXT("NO"));
 		UE_LOG(LogTemp, Warning, TEXT("[Weapon] Attach Parent: %s"),
 			WeaponMesh->GetAttachParent() ? *WeaponMesh->GetAttachParent()->GetName() : TEXT("None"));
 		UE_LOG(LogTemp, Warning, TEXT("[Weapon] Attach Socket: %s"),
 			*WeaponMesh->GetAttachSocketName().ToString());
+	}
+
+	if (AvailableWeapons.Num() > 0)
+	{
+		EquipWeaponByIndex(0);
 	}
 }
 
@@ -256,6 +262,15 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 	else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("SwitchTargetRightAction is NOT set on %s"), *GetName());
+	}
+	
+	if (NextWeaponAction)
+	{
+		EnhancedInput->BindAction(NextWeaponAction, ETriggerEvent::Started, this, &APlayerCharacter::OnNextWeaponPressed);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("NextWeaponAction is NOT set on %s"), *GetName());
 	}
 }
 
@@ -684,4 +699,83 @@ void APlayerCharacter::UpdatePlayerHUD()
 		nullptr,
 		true
 	);
+}
+
+void APlayerCharacter::EquipWeaponByIndex(int32 NewIndex)
+{
+	if (!AvailableWeapons.IsValidIndex(NewIndex))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Weapon] Equip failed: invalid index %d"), NewIndex);
+		return;
+	}
+
+	UCombatComponent* CombatComp = GetCombatComponent();
+	if (!CombatComp)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Weapon] Equip failed: missing CombatComponent"));
+		return;
+	}
+
+	if (CombatComp->IsAttacking())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Weapon] Equip blocked: attack in progress"));
+		return;
+	}
+
+	UWeaponDataAsset* NewWeaponData = AvailableWeapons[NewIndex];
+	if (!NewWeaponData)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Weapon] Equip failed: weapon asset is null"));
+		return;
+	}
+
+	CurrentWeaponIndex = NewIndex;
+	CurrentWeaponData = NewWeaponData;
+
+	if (!CurrentWeaponData->WeaponMesh)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Weapon] Equip failed: WeaponMesh asset is null"));
+	}
+
+	if (WeaponMesh)
+	{
+		WeaponMesh->SetStaticMesh(CurrentWeaponData->WeaponMesh);
+
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[Weapon] SetStaticMesh: %s"),
+			CurrentWeaponData->WeaponMesh ? *CurrentWeaponData->WeaponMesh->GetName() : TEXT("None")
+		);
+	}
+
+	CombatComp->SetAttackSet(CurrentWeaponData->AttackSet);
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("[Weapon] Equipped: %s"),
+		CurrentWeaponData->WeaponId.IsNone() ? TEXT("UnnamedWeapon") : *CurrentWeaponData->WeaponId.ToString()
+	);
+}
+
+void APlayerCharacter::NextWeapon()
+{
+	if (AvailableWeapons.Num() <= 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Weapon] NextWeapon failed: no available weapons"));
+		return;
+	}
+
+	const int32 NextIndex =
+		(CurrentWeaponIndex == INDEX_NONE)
+		? 0
+		: (CurrentWeaponIndex + 1) % AvailableWeapons.Num();
+
+	EquipWeaponByIndex(NextIndex);
+}
+
+void APlayerCharacter::OnNextWeaponPressed()
+{
+	NextWeapon();
 }

@@ -17,6 +17,7 @@ class USpringArmComponent;
 class UStaticMeshComponent;
 class UUserWidget;
 class UStyleComponent;
+class UWeaponDataAsset;
 
 UCLASS()
 class PROJECT_P1_API APlayerCharacter : public ABaseCharacter
@@ -28,6 +29,12 @@ public:
 	
 	UFUNCTION(BlueprintPure, Category="Components")
 	UStyleComponent* GetStyleComponent() const { return StyleComponent; }
+	
+	UFUNCTION(BlueprintCallable, Category="Weapon")
+	void EquipWeaponByIndex(int32 NewIndex);
+
+	UFUNCTION(BlueprintCallable, Category="Weapon")
+	void NextWeapon();
 
 protected:
 	virtual void BeginPlay() override;
@@ -82,6 +89,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input")
 	UInputAction* SwitchTargetRightAction;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input")
+	UInputAction* NextWeaponAction;
+	
 	// Temporary visual weapon mesh attached to the player.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Weapon")
 	UStaticMeshComponent* WeaponMesh;
@@ -118,6 +128,15 @@ protected:
 	
 	UFUNCTION(BlueprintCallable, Category="Animation")
 	bool ConsumeJumpStartTrigger();
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon")
+	TArray<UWeaponDataAsset*> AvailableWeapons;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon")
+	int32 CurrentWeaponIndex = INDEX_NONE;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Weapon")
+	UWeaponDataAsset* CurrentWeaponData = nullptr;
 
 	UFUNCTION()
 	void HandleAttackStarted(FAttackData AttackData);
@@ -141,6 +160,7 @@ protected:
 	void UpdateLockOnCamera(float DeltaSeconds);
 	void UpdateMovementRotationMode();
 	void UpdatePlayerHUD();
+	void OnNextWeaponPressed();
 
 private:
 	virtual void Tick(float DeltaSeconds) override;

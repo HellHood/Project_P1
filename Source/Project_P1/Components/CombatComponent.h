@@ -146,6 +146,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	bool RequestAttackById(FName AttackId);
 
+	UFUNCTION(BlueprintCallable, Category="Combat")
+	void SetAttackSet(UAttackSetDataAsset* NewAttackSet);
+
+	UFUNCTION(BlueprintPure, Category="Combat")
+	bool IsAttacking() const { return bIsAttacking; }
 protected:
 	virtual void BeginPlay() override;
 
