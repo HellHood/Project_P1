@@ -24,8 +24,8 @@ public:
 		float CarrySpeed,
 		float CarryDuration
 	);
-	
-		// Enables full enemy behavior (movement, logic, attacking).
+
+	// Enables full enemy behavior (movement, logic, attacking).
 	void ActivateEnemy();
 
 	// Disables enemy behavior before encounter start.
@@ -50,6 +50,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Enemy|Combat")
 	float AttackDamage = 10.f;
 
+	// Default attack id used by current simple enemy logic.
+	// BT / attack selection can replace this later.
+	UPROPERTY(EditDefaultsOnly, Category="Enemy|Combat")
+	FName DefaultAttackId = TEXT("Enemy_Light_1");
+
 	UPROPERTY(EditDefaultsOnly, Category="Enemy|Debug")
 	bool bDebugEnemy = false;
 
@@ -58,10 +63,10 @@ protected:
 
 	UFUNCTION()
 	void HandleEnemyHealthChanged(UHealthComponent* HealthComp, float NewHealth, float Delta, AActor* InstigatorActor);
-	
+
 	UFUNCTION()
 	void HandleAttackStarted(FAttackData AttackData);
-	
+
 	UFUNCTION(BlueprintPure, Category="Enemy")
 	bool IsDead() const;
 
@@ -81,7 +86,7 @@ private:
 	float PendingCarrySpeed = 0.f;
 	float PendingCarryDuration = 0.f;
 
-	// Active carry forward state
+	// Active carry forward state.
 	bool bIsCarryForwardActive = false;
 	FVector ActiveCarryDirection = FVector::ZeroVector;
 	float ActiveCarrySpeed = 0.f;

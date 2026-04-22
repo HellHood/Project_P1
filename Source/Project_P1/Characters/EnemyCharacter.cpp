@@ -10,6 +10,7 @@
 AEnemyCharacter::AEnemyCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	CombatFaction = ECombatFaction::Enemy;
 
 	bUseControllerRotationYaw = false;
 
@@ -40,7 +41,7 @@ void AEnemyCharacter::BeginPlay()
 		HealthComp->OnDeath.AddDynamic(this, &AEnemyCharacter::HandleEnemyDeath);
 		HealthComp->OnHealthChanged.AddDynamic(this, &AEnemyCharacter::HandleEnemyHealthChanged);
 	}
-	
+
 	if (UCombatComponent* CombatComp = GetCombatComponent())
 	{
 		CombatComp->OnAttackStarted.AddDynamic(this, &AEnemyCharacter::HandleAttackStarted);
@@ -201,6 +202,29 @@ void AEnemyCharacter::TryAttackTarget()
 		return;
 	}
 
+	if (DefaultAttackId.IsNone())
+	{
+		if (bDebugEnemy)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Enemy] Attack skipped: DefaultAttackId is None"));
+		}
+
+		return;
+	}
+
+	if (UCombatComponent* CombatComp = GetCombatComponent())
+	{
+		const bool bAttackStarted = CombatComp->RequestAttackById(DefaultAttackId);
+		if (!bAttackStarted)
+		{
+			return;
+		}
+	}
+	else
+	{
+		return;
+	}
+
 	bAttackOnCooldown = true;
 
 	GetWorldTimerManager().SetTimer(
@@ -211,16 +235,9 @@ void AEnemyCharacter::TryAttackTarget()
 		false
 	);
 
-	AController* InstigatorController = GetController();
-
-	if (UCombatComponent* CombatComp = GetCombatComponent())
-	{
-		CombatComp->RequestAttack((EAttackInputType::Light));
-	}
-
 	if (bDebugEnemy)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Enemy] Attack triggered"));
+		UE_LOG(LogTemp, Warning, TEXT("[Enemy] Attack triggered: %s"), *DefaultAttackId.ToString());
 	}
 }
 
@@ -281,7 +298,6 @@ void AEnemyCharacter::HandleEnemyDeath(UHealthComponent* HealthComp, AActor* Ins
 		MoveComp->StopMovementImmediately();
 		MoveComp->DisableMovement();
 	}
-
 }
 
 void AEnemyCharacter::HandleEnemyHealthChanged(UHealthComponent* HealthComp, float NewHealth, float Delta, AActor* InstigatorActor)
@@ -319,14 +335,12 @@ void AEnemyCharacter::HandleEnemyHealthChanged(UHealthComponent* HealthComp, flo
 		{
 		case EHitReactionType::Knockback:
 		{
-			// Standard push away from attacker
 			MoveComp->AddImpulse(PendingHitReactionDirection * PendingKnockbackStrength, true);
 			break;
 		}
 
 		case EHitReactionType::Launch:
 		{
-			// Launch character upward (used for uppercuts / air combat)
 			const FVector LaunchVelocity =
 				PendingHitReactionDirection * PendingKnockbackStrength +
 				FVector(0.f, 0.f, PendingLaunchStrength);
@@ -337,7 +351,6 @@ void AEnemyCharacter::HandleEnemyHealthChanged(UHealthComponent* HealthComp, flo
 
 		case EHitReactionType::CarryForward:
 		{
-			// Carry the target forward for a short controlled duration.
 			bIsCarryForwardActive = true;
 			ActiveCarryDirection = PendingHitReactionDirection;
 			ActiveCarrySpeed = PendingCarrySpeed;
@@ -357,7 +370,6 @@ void AEnemyCharacter::HandleEnemyHealthChanged(UHealthComponent* HealthComp, flo
 		}
 	}
 
-	// Consume cached data after the reaction was used once.
 	bHasPendingHitReaction = false;
 	PendingReactionType = EHitReactionType::None;
 	PendingHitReactionDirection = FVector::ZeroVector;
@@ -369,10 +381,8 @@ void AEnemyCharacter::HandleEnemyHealthChanged(UHealthComponent* HealthComp, flo
 
 void AEnemyCharacter::DeactivateEnemy()
 {
-	// Disable tick so no AI / logic runs.
 	SetActorTickEnabled(false);
 
-	// Stop movement and disable it.
 	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
 	{
 		MoveComp->StopMovementImmediately();
@@ -384,10 +394,8 @@ void AEnemyCharacter::DeactivateEnemy()
 
 void AEnemyCharacter::ActivateEnemy()
 {
-	// Enable tick again.
 	SetActorTickEnabled(true);
 
-	// Restore movement.
 	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
 	{
 		MoveComp->SetMovementMode(EMovementMode::MOVE_Walking);

@@ -2,10 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "StyleComponent.h"
 #include "CombatComponent.generated.h"
 
 class UAnimMontage;
+class UAttackSetDataAsset;
 
 UENUM(BlueprintType)
 enum class EAttackInputType : uint8
@@ -31,7 +31,7 @@ struct FAttackTransition
 	// Input required to follow this transition.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Attack")
 	EAttackInputType InputType = EAttackInputType::Light;
-	
+
 	// Earliest valid input time relative to attack start.
 	// If both WindowStart and WindowEnd are 0, timing is ignored.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
@@ -56,6 +56,14 @@ struct FAttackData
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
 	FName AttackId = NAME_None;
 
+	// Whether this attack can be selected directly from input as an entry attack.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
+	bool bCanStartAttack = false;
+
+	// Input used to start this attack directly.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
+	EAttackInputType StarterInputType = EAttackInputType::Light;
+
 	// Damage applied on confirmed hit.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
 	float Damage = 25.f;
@@ -64,9 +72,13 @@ struct FAttackData
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
 	float Duration = 0.3f;
 
-	// Time from attack start to hit execution.
+	// Time from attack start to hit window activation.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
-	float HitTime = 0.1f;
+	float HitStartTime = 0.1f;
+
+	// Time from attack start to hit window end.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
+	float HitEndTime = 0.2f;
 
 	// Sweep distance.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
@@ -107,7 +119,7 @@ struct FAttackData
 	// Allowed follow-up transitions from this attack.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
 	TArray<FAttackTransition> Transitions;
-	
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Style")
 	float BaseStyleValue = 10.0f;
 };
@@ -122,31 +134,24 @@ class PROJECT_P1_API UCombatComponent : public UActorComponent
 public:
 	UCombatComponent();
 
-	// Requests an attack entry or follow-up based on input type.
 	UFUNCTION(BlueprintCallable, Category="Combat")
 	bool RequestAttack(EAttackInputType InputType);
 
 	UFUNCTION(BlueprintPure, Category="Combat")
 	bool IsAttackOnCooldown() const { return bAttackOnCooldown; }
 
-	// Broadcast when an attack actually starts.
 	UPROPERTY(BlueprintAssignable, Category="Combat")
 	FOnAttackStartedSignature OnAttackStarted;
+	
+	UFUNCTION(BlueprintCallable, Category="Combat")
+	bool RequestAttackById(FName AttackId);
 
 protected:
 	virtual void BeginPlay() override;
 
-	// Default light attack entry.
+	// Data-driven attack set for the current owner.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat|AttackData")
-	FAttackData LightAttackData;
-
-	// Example follow-up node for testing combo transitions.
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat|AttackData")
-	FAttackData LightFollowupData;
-
-	// Example heavy entry or follow-up node.
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat|AttackData")
-	FAttackData HeavyAttackData;
+	UAttackSetDataAsset* AttackSet = nullptr;
 
 	// Runtime copy of the currently active attack.
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Combat|AttackData")
@@ -155,6 +160,12 @@ protected:
 	// Blocks direct restart while attack is active.
 	UPROPERTY(VisibleInstanceOnly, Category="Combat|State")
 	bool bIsAttacking = false;
+
+	UPROPERTY(VisibleInstanceOnly, Category="Combat|State")
+	bool bHitWindowActive = false;
+
+	UPROPERTY(VisibleInstanceOnly, Category="Combat|State")
+	bool bStyleRegisteredThisAttack = false;
 
 	// Buffered input is consumed when the current attack ends.
 	UPROPERTY(VisibleInstanceOnly, Category="Combat|Input")
@@ -170,22 +181,27 @@ private:
 	bool bAttackOnCooldown = false;
 
 	// Absolute world time when the current attack started.
-	float AttackStartTime = 0.1f;
+	float AttackStartTime = 0.0f;
 
 	// Buffered input timestamp relative to AttackStartTime.
-	float BufferedInputTime = 0.8f;
+	float BufferedInputTime = 0.0f;
+
+	TSet<AActor*> HitActorsThisWindow;
 
 	FTimerHandle AttackDurationHandle;
-	FTimerHandle AttackHitHandle;
 	FTimerHandle AttackCooldownHandle;
+	FTimerHandle HitWindowStartHandle;
+	FTimerHandle HitWindowEndHandle;
+	FTimerHandle HitWindowTickHandle;
 
 	void BeginAttack(const FAttackData& AttackData);
-	void ExecuteCurrentAttackHit();
+	void StartHitWindow();
+	void ProcessHitWindowTick();
+	void EndHitWindow();
 	void EndAttack();
 
 	void ResetAttackCooldown();
 
-	// Collect all hit results for the current attack sweep.
 	bool TraceCurrentAttack(TArray<FHitResult>& OutHits) const;
 	bool ResolveDefaultAttackData(EAttackInputType InputType, FAttackData& OutAttackData) const;
 	bool ResolveTransitionAttack(EAttackInputType InputType, float InputTime, FAttackData& OutAttackData) const;

@@ -32,6 +32,7 @@ static FAutoConsoleVariableRef CVarMovementDebug(
 APlayerCharacter::APlayerCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	CombatFaction = ECombatFaction::Player;
 
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.f);
 
@@ -85,13 +86,13 @@ void APlayerCharacter::BeginPlay()
 
 	if (GetMesh())
 	{
-		const bool bHasSocket = GetMesh()->DoesSocketExist(TEXT("weapon_socket"));
+		const bool bHasSocket = GetMesh()->DoesSocketExist(TEXT("weapon_r"));
 		UE_LOG(LogTemp, Warning, TEXT("[Weapon] Does socket exist: %s"), bHasSocket ? TEXT("YES") : TEXT("NO"));
 	}
 
 	if (GetMesh())
 	{
-		const FTransform SocketTransform = GetMesh()->GetSocketTransform(TEXT("weapon_socket"), RTS_World);
+		const FTransform SocketTransform = GetMesh()->GetSocketTransform(TEXT("weapon_r"), RTS_World);
 		UE_LOG(LogTemp, Warning, TEXT("[Weapon] Socket world location: %s"), *SocketTransform.GetLocation().ToString());
 	}
 

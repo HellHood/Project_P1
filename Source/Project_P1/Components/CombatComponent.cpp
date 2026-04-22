@@ -1,8 +1,10 @@
 #include "CombatComponent.h"
 
+#include "../Characters/BaseCharacter.h"
+#include "../Characters/EnemyCharacter.h"
 #include "../Components/HealthComponent.h"
 #include "../Components/StyleComponent.h"
-#include "../Characters/EnemyCharacter.h"
+#include "../Data/AttackSetDataAsset.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
@@ -62,6 +64,32 @@ bool UCombatComponent::RequestAttack(EAttackInputType InputType)
 	return true;
 }
 
+bool UCombatComponent::RequestAttackById(FName AttackId)
+{
+	if (bIsAttacking)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack by id blocked: already attacking"));
+		return false;
+	}
+
+	if (bAttackOnCooldown)
+	{
+		return false;
+	}
+
+	FAttackData AttackData;
+	if (!ResolveAttackById(AttackId, AttackData))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack by id failed: %s"), *AttackId.ToString());
+		return false;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack started: %s"), *AttackData.AttackId.ToString());
+
+	BeginAttack(AttackData);
+	return true;
+}
+
 void UCombatComponent::BeginAttack(const FAttackData& AttackData)
 {
 	CurrentAttackData = AttackData;
@@ -69,8 +97,11 @@ void UCombatComponent::BeginAttack(const FAttackData& AttackData)
 
 	bIsAttacking = true;
 	bAttackOnCooldown = true;
+	bHitWindowActive = false;
+	bStyleRegisteredThisAttack = false;
 	bHasBufferedAttack = false;
 	BufferedInputTime = 0.0f;
+	HitActorsThisWindow.Empty();
 
 	if (const UWorld* World = GetWorld())
 	{
@@ -81,7 +112,13 @@ void UCombatComponent::BeginAttack(const FAttackData& AttackData)
 		AttackStartTime = 0.0f;
 	}
 
-	GetWorld()->GetTimerManager().SetTimer(
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	World->GetTimerManager().SetTimer(
 		AttackCooldownHandle,
 		this,
 		&UCombatComponent::ResetAttackCooldown,
@@ -89,15 +126,23 @@ void UCombatComponent::BeginAttack(const FAttackData& AttackData)
 		false
 	);
 
-	GetWorld()->GetTimerManager().SetTimer(
-		AttackHitHandle,
+	World->GetTimerManager().SetTimer(
+		HitWindowStartHandle,
 		this,
-		&UCombatComponent::ExecuteCurrentAttackHit,
-		CurrentAttackData.HitTime,
+		&UCombatComponent::StartHitWindow,
+		CurrentAttackData.HitStartTime,
 		false
 	);
 
-	GetWorld()->GetTimerManager().SetTimer(
+	World->GetTimerManager().SetTimer(
+		HitWindowEndHandle,
+		this,
+		&UCombatComponent::EndHitWindow,
+		CurrentAttackData.HitEndTime,
+		false
+	);
+
+	World->GetTimerManager().SetTimer(
 		AttackDurationHandle,
 		this,
 		&UCombatComponent::EndAttack,
@@ -106,14 +151,43 @@ void UCombatComponent::BeginAttack(const FAttackData& AttackData)
 	);
 }
 
-void UCombatComponent::ExecuteCurrentAttackHit()
+void UCombatComponent::StartHitWindow()
 {
+	if (bHitWindowActive)
+	{
+		return;
+	}
+
+	bHitWindowActive = true;
+	HitActorsThisWindow.Empty();
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	World->GetTimerManager().SetTimer(
+		HitWindowTickHandle,
+		this,
+		&UCombatComponent::ProcessHitWindowTick,
+		0.02f,
+		true
+	);
+}
+
+void UCombatComponent::ProcessHitWindowTick()
+{
+	if (!bHitWindowActive)
+	{
+		return;
+	}
+
 	TArray<FHitResult> Hits;
 	const bool bHit = TraceCurrentAttack(Hits);
 
 	if (!bHit)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Combat] Hit missed"));
 		return;
 	}
 
@@ -122,6 +196,8 @@ void UCombatComponent::ExecuteCurrentAttackHit()
 	{
 		return;
 	}
+
+	ABaseCharacter* OwnerCharacter = Cast<ABaseCharacter>(OwnerActor);
 
 	const FVector OwnerLocation = OwnerActor->GetActorLocation();
 	const FVector OwnerForward = OwnerActor->GetActorForwardVector();
@@ -132,7 +208,7 @@ void UCombatComponent::ExecuteCurrentAttackHit()
 		InstigatorController = OwnerPawn->GetController();
 	}
 
-	// Prevent multiple damage applications to the same actor from one sweep.
+	// Prevent multiple damage applications to the same actor from one trace.
 	TSet<AActor*> UniqueActors;
 	TArray<AActor*> ValidTargets;
 
@@ -144,12 +220,33 @@ void UCombatComponent::ExecuteCurrentAttackHit()
 			continue;
 		}
 
+		// Ignore self.
+		if (HitActor == OwnerActor)
+		{
+			continue;
+		}
+
 		if (UniqueActors.Contains(HitActor))
 		{
 			continue;
 		}
 
 		UniqueActors.Add(HitActor);
+
+		// Ignore already hit actors during the same active hit window.
+		if (HitActorsThisWindow.Contains(HitActor))
+		{
+			continue;
+		}
+
+		ABaseCharacter* HitCharacter = Cast<ABaseCharacter>(HitActor);
+		if (OwnerCharacter && HitCharacter)
+		{
+			if (OwnerCharacter->GetCombatFaction() == HitCharacter->GetCombatFaction())
+			{
+				continue;
+			}
+		}
 
 		UHealthComponent* HealthComp = HitActor->FindComponentByClass<UHealthComponent>();
 		if (!HealthComp)
@@ -162,27 +259,29 @@ void UCombatComponent::ExecuteCurrentAttackHit()
 			continue;
 		}
 
-		// Keep only unique, alive actors that can actually receive damage.
 		ValidTargets.Add(HitActor);
 	}
 
 	if (ValidTargets.IsEmpty())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Combat] Hit missed"));
 		return;
 	}
 
-	// Register style once per successful swing, not once per target.
-	if (UStyleComponent* StyleComp = OwnerActor->FindComponentByClass<UStyleComponent>())
+	// Register style once per successful attack, not once per target or per tick.
+	if (!bStyleRegisteredThisAttack)
 	{
-		StyleComp->RegisterAttackHit(
-			CurrentAttackData.AttackId,
-			CurrentAttackData.BaseStyleValue
-		);
+		if (UStyleComponent* StyleComp = OwnerActor->FindComponentByClass<UStyleComponent>())
+		{
+			StyleComp->RegisterAttackHit(
+				CurrentAttackData.AttackId,
+				CurrentAttackData.BaseStyleValue
+			);
+		}
+
+		bStyleRegisteredThisAttack = true;
 	}
 
 	// Choose the target that feels most natural for the current swing.
-	// Forward alignment is weighted more than distance, but closer targets still gain score.
 	AActor* PrimaryTarget = nullptr;
 	float BestScore = -9999.f;
 
@@ -192,14 +291,8 @@ void UCombatComponent::ExecuteCurrentAttackHit()
 		const float Distance = ToTarget.Size();
 		const FVector Direction = ToTarget.GetSafeNormal();
 
-		// Higher dot means the target is more in front of the attacker.
 		const float Dot = FVector::DotProduct(OwnerForward, Direction);
-
-		// Normalize distance inside attack range.
-		// 1.0 = very close, 0.0 = near the end of the sweep range.
 		const float DistanceScore = 1.0f - FMath::Clamp(Distance / CurrentAttackData.Range, 0.f, 1.f);
-
-		// Favor forward alignment while still preferring closer targets.
 		const float Score = (Dot * 0.7f) + (DistanceScore * 0.3f);
 
 		if (Score > BestScore)
@@ -214,6 +307,8 @@ void UCombatComponent::ExecuteCurrentAttackHit()
 
 	for (AActor* TargetActor : ValidTargets)
 	{
+		HitActorsThisWindow.Add(TargetActor);
+
 		const FVector HitDirection = (TargetActor->GetActorLocation() - OwnerLocation).GetSafeNormal();
 		const float ReactionMultiplier =
 			TargetActor == PrimaryTarget ? PrimaryReactionMultiplier : SecondaryReactionMultiplier;
@@ -253,12 +348,35 @@ void UCombatComponent::ExecuteCurrentAttackHit()
 	}
 }
 
+void UCombatComponent::EndHitWindow()
+{
+	if (!bHitWindowActive)
+	{
+		return;
+	}
+
+	bHitWindowActive = false;
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(HitWindowTickHandle);
+	}
+}
+
 void UCombatComponent::EndAttack()
 {
 	bIsAttacking = false;
+	bHitWindowActive = false;
 
-	GetWorld()->GetTimerManager().ClearTimer(AttackDurationHandle);
-	GetWorld()->GetTimerManager().ClearTimer(AttackHitHandle);
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(AttackDurationHandle);
+		World->GetTimerManager().ClearTimer(HitWindowStartHandle);
+		World->GetTimerManager().ClearTimer(HitWindowEndHandle);
+		World->GetTimerManager().ClearTimer(HitWindowTickHandle);
+	}
+
+	HitActorsThisWindow.Empty();
 
 	UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack ended: %s"), *CurrentAttackData.AttackId.ToString());
 
@@ -287,7 +405,11 @@ void UCombatComponent::EndAttack()
 void UCombatComponent::ResetAttackCooldown()
 {
 	bAttackOnCooldown = false;
-	GetWorld()->GetTimerManager().ClearTimer(AttackCooldownHandle);
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(AttackCooldownHandle);
+	}
 }
 
 bool UCombatComponent::TraceCurrentAttack(TArray<FHitResult>& OutHits) const
@@ -332,19 +454,12 @@ bool UCombatComponent::TraceCurrentAttack(TArray<FHitResult>& OutHits) const
 
 bool UCombatComponent::ResolveDefaultAttackData(EAttackInputType InputType, FAttackData& OutAttackData) const
 {
-	switch (InputType)
+	if (!AttackSet)
 	{
-	case EAttackInputType::Light:
-		OutAttackData = LightAttackData;
-		return true;
-
-	case EAttackInputType::Heavy:
-		OutAttackData = HeavyAttackData;
-		return true;
-
-	default:
 		return false;
 	}
+
+	return AttackSet->FindStarterAttack(InputType, OutAttackData);
 }
 
 bool UCombatComponent::ResolveTransitionAttack(EAttackInputType InputType, float InputTime, FAttackData& OutAttackData) const
@@ -356,7 +471,6 @@ bool UCombatComponent::ResolveTransitionAttack(EAttackInputType InputType, float
 			continue;
 		}
 
-		// If both values are zero, treat the transition like an untimed follow-up.
 		const bool bUseTimingWindow =
 			!FMath::IsNearlyZero(Transition.WindowStart) ||
 			!FMath::IsNearlyZero(Transition.WindowEnd);
@@ -377,23 +491,10 @@ bool UCombatComponent::ResolveTransitionAttack(EAttackInputType InputType, float
 
 bool UCombatComponent::ResolveAttackById(FName AttackId, FAttackData& OutAttackData) const
 {
-	if (AttackId == LightAttackData.AttackId)
+	if (!AttackSet)
 	{
-		OutAttackData = LightAttackData;
-		return true;
+		return false;
 	}
 
-	if (AttackId == LightFollowupData.AttackId)
-	{
-		OutAttackData = LightFollowupData;
-		return true;
-	}
-
-	if (AttackId == HeavyAttackData.AttackId)
-	{
-		OutAttackData = HeavyAttackData;
-		return true;
-	}
-
-	return false;
+	return AttackSet->FindAttackById(AttackId, OutAttackData);
 }

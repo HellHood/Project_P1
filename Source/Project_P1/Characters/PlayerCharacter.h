@@ -87,7 +87,7 @@ protected:
 	UStaticMeshComponent* WeaponMesh;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon")
-	FName WeaponSocketName = TEXT("weapon_socket");
+	FName WeaponSocketName = TEXT("weapon_r");
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI")
 	TSubclassOf<UUserWidget> PlayerHUDWidgetClass;

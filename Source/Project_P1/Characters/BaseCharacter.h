@@ -7,6 +7,14 @@
 class UCombatComponent;
 class UHealthComponent;
 
+UENUM(BlueprintType)
+enum class ECombatFaction : uint8
+{
+	Player UMETA(DisplayName = "Player"),
+	Enemy UMETA(DisplayName = "Enemy"),
+	Neutral UMETA(DisplayName = "Neutral")
+};
+
 UCLASS()
 class PROJECT_P1_API ABaseCharacter : public ACharacter
 {
@@ -15,21 +23,22 @@ class PROJECT_P1_API ABaseCharacter : public ACharacter
 public:
 	ABaseCharacter();
 
-	UFUNCTION(BlueprintPure, Category="Systems|Health")
-	UHealthComponent* GetHealthComponent() const { return HealthComponent; }
-
-	UFUNCTION(BlueprintPure, Category="Systems|Combat")
+	UFUNCTION(BlueprintPure, Category="Components")
 	UCombatComponent* GetCombatComponent() const { return CombatComponent; }
 
+	UFUNCTION(BlueprintPure, Category="Components")
+	UHealthComponent* GetHealthComponent() const { return HealthComponent; }
+
+	UFUNCTION(BlueprintPure, Category="Combat")
+	ECombatFaction GetCombatFaction() const { return CombatFaction; }
+
 protected:
-	virtual void BeginPlay() override;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	UCombatComponent* CombatComponent = nullptr;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Systems")
-	UHealthComponent* HealthComponent;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	UHealthComponent* HealthComponent = nullptr;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Systems")
-	UCombatComponent* CombatComponent;
-
-public:
-	virtual void Tick(float DeltaTime) override;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat")
+	ECombatFaction CombatFaction = ECombatFaction::Neutral;
 };
