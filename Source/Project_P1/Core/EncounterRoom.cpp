@@ -117,7 +117,7 @@ void AEncounterRoom::SpawnEncounterEnemies()
 			continue;
 		}
 
-		const FTransform SpawnTransform = SpawnEntry.SpawnPoint->GetComponentTransform();
+		const FTransform SpawnTransform = SpawnEntry.SpawnPoint->GetActorTransform();
 
 		AEnemyCharacter* SpawnedEnemy = World->SpawnActorDeferred<AEnemyCharacter>(
 			SpawnEntry.EnemyClass,
@@ -127,17 +127,23 @@ void AEncounterRoom::SpawnEncounterEnemies()
 			ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn
 		);
 
-		if (!SpawnedEnemy)
+		if (!SpawnEntry.SpawnPoint)
 		{
 			if (bDebugEncounter)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("[Encounter] Spawn failed for class: %s"), *SpawnEntry.EnemyClass->GetName());
+				UE_LOG(LogTemp, Warning, TEXT("[Encounter] Spawn skipped: SpawnPoint is null"));
 			}
-
 			continue;
 		}
 
 		SpawnedEnemy->FinishSpawning(SpawnTransform);
+
+		SpawnedEnemy->SpawnDefaultController();
+
+		// optional debug
+		UE_LOG(LogTemp, Warning, TEXT("[Encounter] Controller after spawn: %s"),
+			SpawnedEnemy->GetController() ? *SpawnedEnemy->GetController()->GetName() : TEXT("NONE"));
+
 		SpawnedEnemy->ActivateEnemy();
 
 		if (UHealthComponent* HealthComp = SpawnedEnemy->GetHealthComponent())

@@ -19,8 +19,9 @@ struct FEncounterSpawnEntry
 	TSubclassOf<AEnemyCharacter> EnemyClass = nullptr;
 
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Encounter")
-	USceneComponent* SpawnPoint = nullptr;
+	AActor* SpawnPoint = nullptr;
 };
+
 
 UCLASS()
 class PROJECT_P1_API AEncounterRoom : public AActor

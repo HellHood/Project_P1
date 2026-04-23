@@ -6,6 +6,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Project_P1/Components/HealthComponent.h"
 #include "TimerManager.h"
+#include "../Components/CombatComponent.h"
 
 AEnemyCharacter::AEnemyCharacter()
 {
@@ -28,6 +29,7 @@ void AEnemyCharacter::BeginPlay()
 
 	TargetPawn = UGameplayStatics::GetPlayerPawn(this, 0);
 
+	
 	GetWorldTimerManager().SetTimer(
 		RepathHandle,
 		this,
@@ -44,13 +46,24 @@ void AEnemyCharacter::BeginPlay()
 
 	if (UCombatComponent* CombatComp = GetCombatComponent())
 	{
-		CombatComp->OnAttackStarted.AddDynamic(this, &AEnemyCharacter::HandleAttackStarted);
+		if (EnemyAttackSet)
+		{
+			CombatComp->SetAttackSet(EnemyAttackSet);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Enemy] Missing EnemyAttackSet on %s"), *GetName());
+		}
+		
+			CombatComp->OnAttackStarted.AddDynamic(this, &AEnemyCharacter::HandleAttackStarted);
+		
 	}
 }
 
 void AEnemyCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	
 
 	if (bIsDead)
 	{
@@ -98,15 +111,16 @@ void AEnemyCharacter::Tick(float DeltaSeconds)
 
 	if (bDebugEnemy)
 	{
-		UE_LOG(
-			LogTemp,
-			Warning,
-			TEXT("[Enemy] Dist=%.1f Chase=%d AttackCooldown=%d"),
-			DistanceToTarget,
-			DistanceToTarget <= ChaseRange ? 1 : 0,
-			bAttackOnCooldown ? 1 : 0
-		);
+		// UE_LOG(
+		// 	LogTemp,
+		// 	Warning,
+		// 	TEXT("[Enemy] Dist=%.1f Chase=%d AttackCooldown=%d"),
+		// 	DistanceToTarget,
+		// 	DistanceToTarget <= ChaseRange ? 1 : 0,
+		// 	bAttackOnCooldown ? 1 : 0
+		// );
 	}
+
 }
 
 void AEnemyCharacter::SetPendingHitReaction(
@@ -262,6 +276,7 @@ void AEnemyCharacter::RepathTick()
 
 void AEnemyCharacter::ResetAttackCooldown()
 {
+	UE_LOG(LogTemp, Warning, TEXT("[Enemy] Cooldown reset"));
 	bAttackOnCooldown = false;
 	GetWorldTimerManager().ClearTimer(AttackCooldownHandle);
 }
@@ -400,6 +415,12 @@ void AEnemyCharacter::ActivateEnemy()
 	{
 		MoveComp->SetMovementMode(EMovementMode::MOVE_Walking);
 	}
+
+	bIsCarryForwardActive = false;
+	bAttackOnCooldown = false;
+	bHasPendingHitReaction = false;
+
+	GetWorldTimerManager().ClearTimer(AttackCooldownHandle);
 
 	UE_LOG(LogTemp, Warning, TEXT("[Enemy] Activated: %s"), *GetName());
 }

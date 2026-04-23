@@ -6,6 +6,8 @@
 #include "EnemyCharacter.generated.h"
 
 class UHealthComponent;
+class UAttackSetDataAsset;
+class UCombatComponent;
 
 UCLASS()
 class PROJECT_P1_API AEnemyCharacter : public ABaseCharacter
@@ -33,7 +35,6 @@ public:
 	
 	UFUNCTION(BlueprintPure, Category="Enemy")
 	bool IsDead() const;
-	
 
 protected:
 	virtual void BeginPlay() override;
@@ -61,6 +62,9 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Enemy|Debug")
 	bool bDebugEnemy = false;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Enemy|Combat")
+	UAttackSetDataAsset* EnemyAttackSet = nullptr;
 
 	UFUNCTION()
 	void HandleEnemyDeath(UHealthComponent* HealthComp, AActor* InstigatorActor);
@@ -70,8 +74,6 @@ protected:
 
 	UFUNCTION()
 	void HandleAttackStarted(FAttackData AttackData);
-
-
 
 private:
 	UPROPERTY()
