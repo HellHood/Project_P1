@@ -35,6 +35,9 @@ public:
 	
 	UFUNCTION(BlueprintPure, Category="Enemy")
 	bool IsDead() const;
+	
+	UFUNCTION(BlueprintCallable, Category="Enemy|Combat")
+	bool TryAttackFromAI();
 
 protected:
 	virtual void BeginPlay() override;

@@ -63,14 +63,13 @@ void AEnemyCharacter::BeginPlay()
 void AEnemyCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	
 
 	if (bIsDead)
 	{
 		return;
 	}
 
-	// Carry forward temporarily overrides normal chase/attack logic.
+	// Carry forward temporarily overrides normal movement.
 	if (bIsCarryForwardActive)
 	{
 		ActiveCarryTimeRemaining -= DeltaSeconds;
@@ -95,32 +94,6 @@ void AEnemyCharacter::Tick(float DeltaSeconds)
 
 		return;
 	}
-
-	if (!IsTargetValid())
-	{
-		TargetPawn = UGameplayStatics::GetPlayerPawn(this, 0);
-		return;
-	}
-
-	const float DistanceToTarget = DistanceToTarget2D();
-
-	if (DistanceToTarget <= AttackRange)
-	{
-		TryAttackTarget();
-	}
-
-	if (bDebugEnemy)
-	{
-		// UE_LOG(
-		// 	LogTemp,
-		// 	Warning,
-		// 	TEXT("[Enemy] Dist=%.1f Chase=%d AttackCooldown=%d"),
-		// 	DistanceToTarget,
-		// 	DistanceToTarget <= ChaseRange ? 1 : 0,
-		// 	bAttackOnCooldown ? 1 : 0
-		// );
-	}
-
 }
 
 void AEnemyCharacter::SetPendingHitReaction(
@@ -199,21 +172,21 @@ void AEnemyCharacter::ChaseTarget()
 	AIController->MoveToActor(TargetPawn, AttackRange - 10.f, true);
 }
 
-void AEnemyCharacter::TryAttackTarget()
+bool AEnemyCharacter::TryAttackFromAI()
 {
 	if (bIsDead || bIsCarryForwardActive)
 	{
-		return;
+		return false;
 	}
 
 	if (bAttackOnCooldown)
 	{
-		return;
+		return false;
 	}
 
 	if (!HasLineOfSightToTarget())
 	{
-		return;
+		return false;
 	}
 
 	if (DefaultAttackId.IsNone())
@@ -223,7 +196,7 @@ void AEnemyCharacter::TryAttackTarget()
 			UE_LOG(LogTemp, Warning, TEXT("[Enemy] Attack skipped: DefaultAttackId is None"));
 		}
 
-		return;
+		return false;
 	}
 
 	if (UCombatComponent* CombatComp = GetCombatComponent())
@@ -231,12 +204,12 @@ void AEnemyCharacter::TryAttackTarget()
 		const bool bAttackStarted = CombatComp->RequestAttackById(DefaultAttackId);
 		if (!bAttackStarted)
 		{
-			return;
+			return false;
 		}
 	}
 	else
 	{
-		return;
+		return false;
 	}
 
 	bAttackOnCooldown = true;
@@ -249,6 +222,17 @@ void AEnemyCharacter::TryAttackTarget()
 		false
 	);
 
+	if (bDebugEnemy)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Enemy] Attack triggered: %s"), *DefaultAttackId.ToString());
+	}
+
+	return true;
+}
+
+void AEnemyCharacter::TryAttackTarget()
+{
+	TryAttackFromAI();
 	if (bDebugEnemy)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[Enemy] Attack triggered: %s"), *DefaultAttackId.ToString());
