@@ -6,8 +6,22 @@
 #include "EnemyCharacter.generated.h"
 
 class UHealthComponent;
-class UAttackSetDataAsset;
 class UCombatComponent;
+
+USTRUCT(BlueprintType)
+struct FEnemyAttackOption
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, Category="Enemy|Combat")
+	FName AttackId = NAME_None;
+
+	UPROPERTY(EditDefaultsOnly, Category="Enemy|Combat")
+	float MinRange = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Enemy|Combat")
+	float MaxRange = 250.f;
+};
 
 UCLASS()
 class PROJECT_P1_API AEnemyCharacter : public ABaseCharacter
@@ -33,41 +47,29 @@ public:
 	// Disables enemy behavior before encounter start.
 	void DeactivateEnemy();
 	
+	UFUNCTION(BlueprintPure, Category="Enemy|Combat")
+	bool IsTargetInAttackRange() const;
+	
 	UFUNCTION(BlueprintPure, Category="Enemy")
 	bool IsDead() const;
 	
 	UFUNCTION(BlueprintCallable, Category="Enemy|Combat")
 	bool TryAttackFromAI();
 
+	bool TryAttackFromAI(float& OutAttackDuration);
+	
+	UFUNCTION(BlueprintPure, Category="Enemy|Combat")
+	bool CanAttack() const;
+	
+	UPROPERTY(EditDefaultsOnly, Category="Enemy|Combat")
+	TArray<FEnemyAttackOption> AttackOptions;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
-
-	UPROPERTY(EditDefaultsOnly, Category="Enemy|AI")
-	float ChaseRange = 1200.f;
-
-	UPROPERTY(EditDefaultsOnly, Category="Enemy|AI")
-	float RepathInterval = 0.2f;
-
-	UPROPERTY(EditDefaultsOnly, Category="Enemy|Combat")
-	float AttackRange = 140.f;
-
-	UPROPERTY(EditDefaultsOnly, Category="Enemy|Combat")
-	float AttackCooldown = 1.0f;
-
-	UPROPERTY(EditDefaultsOnly, Category="Enemy|Combat")
-	float AttackDamage = 10.f;
-
-	// Default attack id used by current simple enemy logic.
-	// BT / attack selection can replace this later.
-	UPROPERTY(EditDefaultsOnly, Category="Enemy|Combat")
-	FName DefaultAttackId = TEXT("Enemy_Light_1");
-
+	
 	UPROPERTY(EditDefaultsOnly, Category="Enemy|Debug")
 	bool bDebugEnemy = false;
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Enemy|Combat")
-	UAttackSetDataAsset* EnemyAttackSet = nullptr;
 
 	UFUNCTION()
 	void HandleEnemyDeath(UHealthComponent* HealthComp, AActor* InstigatorActor);
@@ -77,12 +79,13 @@ protected:
 
 	UFUNCTION()
 	void HandleAttackStarted(FAttackData AttackData);
+	
+	
 
 private:
 	UPROPERTY()
 	APawn* TargetPawn = nullptr;
 
-	bool bAttackOnCooldown = false;
 	bool bIsDead = false;
 
 	// Store hit reaction until HealthComponent confirms damage.
@@ -99,16 +102,12 @@ private:
 	FVector ActiveCarryDirection = FVector::ZeroVector;
 	float ActiveCarrySpeed = 0.f;
 	float ActiveCarryTimeRemaining = 0.f;
-
-	FTimerHandle AttackCooldownHandle;
-	FTimerHandle RepathHandle;
-
+	
 	bool IsTargetValid() const;
 	float DistanceToTarget2D() const;
 	bool HasLineOfSightToTarget() const;
-
-	void ChaseTarget();
+	FName ChooseAttackId() const;
+	bool IsAttackOptionInRange(const FEnemyAttackOption& AttackOption, float TargetDistance) const;
+	float ScoreAttackOption(const FEnemyAttackOption& AttackOption, float TargetDistance) const;
 	void TryAttackTarget();
-	void RepathTick();
-	void ResetAttackCooldown();
 };

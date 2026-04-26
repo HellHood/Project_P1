@@ -151,12 +151,22 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Combat")
 	bool IsAttacking() const { return bIsAttacking; }
+	
+	UFUNCTION(BlueprintPure, Category="Combat")
+	bool CanStartAttackById(FName AttackId) const;
+	
+	UFUNCTION(BlueprintPure, Category="Combat")
+	bool HasAttackById(FName AttackId) const;
+	bool GetAttackDataById(FName AttackId, FAttackData& OutAttackData) const;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack Data", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UAttackSetDataAsset> AttackSet = nullptr;
+	
+
 protected:
 	virtual void BeginPlay() override;
 
 	// Data-driven attack set for the current owner.
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat|AttackData")
-	UAttackSetDataAsset* AttackSet = nullptr;
 
 	// Runtime copy of the currently active attack.
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Combat|AttackData")

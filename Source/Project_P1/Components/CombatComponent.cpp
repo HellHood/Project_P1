@@ -509,3 +509,58 @@ void UCombatComponent::SetAttackSet(UAttackSetDataAsset* NewAttackSet)
 
 	AttackSet = NewAttackSet;
 }
+
+bool UCombatComponent::CanStartAttackById(FName AttackId) const
+{
+	if (bIsAttacking)
+	{
+		return false;
+	}
+
+	if (bAttackOnCooldown)
+	{
+		return false;
+	}
+
+	if (AttackId.IsNone())
+	{
+		return false;
+	}
+
+	FAttackData AttackData;
+	return ResolveAttackById(AttackId, AttackData);
+}
+
+bool UCombatComponent::HasAttackById(FName AttackId) const
+{
+	if (AttackId.IsNone())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Combat] HasAttackById failed: AttackId is None"));
+		return false;
+	}
+
+	if (!AttackSet)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Combat] HasAttackById failed: AttackSet is NULL on %s"), *GetNameSafe(GetOwner()));
+		return false;
+	}
+
+	FAttackData AttackData;
+	const bool bFoundAttack = ResolveAttackById(AttackId, AttackData);
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("[Combat] HasAttackById %s in %s -> %s"),
+		*AttackId.ToString(),
+		*GetNameSafe(AttackSet),
+		bFoundAttack ? TEXT("FOUND") : TEXT("NOT FOUND")
+	);
+
+	return bFoundAttack;
+}
+
+bool UCombatComponent::GetAttackDataById(FName AttackId, FAttackData& OutAttackData) const
+{
+	return ResolveAttackById(AttackId, OutAttackData);
+}

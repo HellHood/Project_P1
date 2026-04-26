@@ -28,16 +28,7 @@ void AEnemyCharacter::BeginPlay()
 	Super::BeginPlay();
 
 	TargetPawn = UGameplayStatics::GetPlayerPawn(this, 0);
-
 	
-	GetWorldTimerManager().SetTimer(
-		RepathHandle,
-		this,
-		&AEnemyCharacter::RepathTick,
-		RepathInterval,
-		true
-	);
-
 	if (UHealthComponent* HealthComp = GetHealthComponent())
 	{
 		HealthComp->OnDeath.AddDynamic(this, &AEnemyCharacter::HandleEnemyDeath);
@@ -45,18 +36,8 @@ void AEnemyCharacter::BeginPlay()
 	}
 
 	if (UCombatComponent* CombatComp = GetCombatComponent())
-	{
-		if (EnemyAttackSet)
-		{
-			CombatComp->SetAttackSet(EnemyAttackSet);
-		}
-		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[Enemy] Missing EnemyAttackSet on %s"), *GetName());
-		}
-		
+	{		
 			CombatComp->OnAttackStarted.AddDynamic(this, &AEnemyCharacter::HandleAttackStarted);
-		
 	}
 }
 
@@ -156,75 +137,49 @@ bool AEnemyCharacter::HasLineOfSightToTarget() const
 	return !bHit || Hit.GetActor() == TargetPawn;
 }
 
-void AEnemyCharacter::ChaseTarget()
+bool AEnemyCharacter::TryAttackFromAI(float& OutAttackDuration)
 {
-	if (bIsDead || bIsCarryForwardActive)
-	{
-		return;
-	}
+	OutAttackDuration = 0.f;
 
-	AAIController* AIController = Cast<AAIController>(GetController());
-	if (!AIController)
-	{
-		return;
-	}
-
-	AIController->MoveToActor(TargetPawn, AttackRange - 10.f, true);
-}
-
-bool AEnemyCharacter::TryAttackFromAI()
-{
 	if (bIsDead || bIsCarryForwardActive)
 	{
 		return false;
 	}
 
-	if (bAttackOnCooldown)
+	if (!IsTargetInAttackRange())
 	{
 		return false;
 	}
 
-	if (!HasLineOfSightToTarget())
+	UCombatComponent* CombatComp = GetCombatComponent();
+	if (!CombatComp)
 	{
 		return false;
 	}
 
-	if (DefaultAttackId.IsNone())
-	{
-		if (bDebugEnemy)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[Enemy] Attack skipped: DefaultAttackId is None"));
-		}
-
-		return false;
-	}
-
-	if (UCombatComponent* CombatComp = GetCombatComponent())
-	{
-		const bool bAttackStarted = CombatComp->RequestAttackById(DefaultAttackId);
-		if (!bAttackStarted)
-		{
-			return false;
-		}
-	}
-	else
+	const FName ChosenAttackId = ChooseAttackId();
+	if (ChosenAttackId.IsNone())
 	{
 		return false;
 	}
 
-	bAttackOnCooldown = true;
+	FAttackData AttackData;
+	if (!CombatComp->GetAttackDataById(ChosenAttackId, AttackData))
+	{
+		return false;
+	}
 
-	GetWorldTimerManager().SetTimer(
-		AttackCooldownHandle,
-		this,
-		&AEnemyCharacter::ResetAttackCooldown,
-		AttackCooldown,
-		false
-	);
+	const bool bAttackStarted = CombatComp->RequestAttackById(ChosenAttackId);
+	if (!bAttackStarted)
+	{
+		return false;
+	}
+
+	OutAttackDuration = AttackData.Duration;
 
 	if (bDebugEnemy)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Enemy] Attack triggered: %s"), *DefaultAttackId.ToString());
+		UE_LOG(LogTemp, Warning, TEXT("[Enemy] Attack triggered: %s, Duration: %.2f"), *ChosenAttackId.ToString(), OutAttackDuration);
 	}
 
 	return true;
@@ -233,36 +188,6 @@ bool AEnemyCharacter::TryAttackFromAI()
 void AEnemyCharacter::TryAttackTarget()
 {
 	TryAttackFromAI();
-	if (bDebugEnemy)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[Enemy] Attack triggered: %s"), *DefaultAttackId.ToString());
-	}
-}
-
-void AEnemyCharacter::RepathTick()
-{
-	if (bIsDead || bIsCarryForwardActive)
-	{
-		return;
-	}
-
-	if (!IsTargetValid())
-	{
-		return;
-	}
-
-	const float DistanceToTarget = DistanceToTarget2D();
-	if (DistanceToTarget <= ChaseRange)
-	{
-		ChaseTarget();
-	}
-}
-
-void AEnemyCharacter::ResetAttackCooldown()
-{
-	UE_LOG(LogTemp, Warning, TEXT("[Enemy] Cooldown reset"));
-	bAttackOnCooldown = false;
-	GetWorldTimerManager().ClearTimer(AttackCooldownHandle);
 }
 
 void AEnemyCharacter::HandleEnemyDeath(UHealthComponent* HealthComp, AActor* InstigatorActor)
@@ -281,10 +206,6 @@ void AEnemyCharacter::HandleEnemyDeath(UHealthComponent* HealthComp, AActor* Ins
 		TEXT("[Enemy] Died. Instigator: %s"),
 		InstigatorActor ? *InstigatorActor->GetName() : TEXT("None")
 	);
-
-	GetWorldTimerManager().ClearTimer(RepathHandle);
-	GetWorldTimerManager().ClearTimer(AttackCooldownHandle);
-	bAttackOnCooldown = false;
 
 	if (AAIController* AIController = Cast<AAIController>(GetController()))
 	{
@@ -401,10 +322,7 @@ void AEnemyCharacter::ActivateEnemy()
 	}
 
 	bIsCarryForwardActive = false;
-	bAttackOnCooldown = false;
 	bHasPendingHitReaction = false;
-
-	GetWorldTimerManager().ClearTimer(AttackCooldownHandle);
 
 	UE_LOG(LogTemp, Warning, TEXT("[Enemy] Activated: %s"), *GetName());
 }
@@ -428,4 +346,190 @@ bool AEnemyCharacter::IsDead() const
 	}
 
 	return HealthComp->IsDead();
+}
+
+bool AEnemyCharacter::IsTargetInAttackRange() const
+{
+	if (!IsTargetValid())
+	{
+		if (bDebugEnemy)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Enemy] Range check failed: invalid target"));
+		}
+
+		return false;
+	}
+
+	if (!HasLineOfSightToTarget())
+	{
+		if (bDebugEnemy)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Enemy] Range check failed: no line of sight"));
+		}
+
+		return false;
+	}
+
+	const float TargetDistance = DistanceToTarget2D();
+
+	for (const FEnemyAttackOption& AttackOption : AttackOptions)
+	{
+		if (AttackOption.AttackId.IsNone())
+		{
+			if (bDebugEnemy)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[Enemy] Range option skipped: AttackId is None"));
+			}
+
+			continue;
+		}
+
+		if (IsAttackOptionInRange(AttackOption, TargetDistance))
+		{
+			if (bDebugEnemy)
+			{
+				UE_LOG(
+					LogTemp,
+					Warning,
+					TEXT("[Enemy] In range: Distance %.1f, Attack %s, Range %.1f-%.1f"),
+					TargetDistance,
+					*AttackOption.AttackId.ToString(),
+					AttackOption.MinRange,
+					AttackOption.MaxRange
+				);
+			}
+
+			return true;
+		}
+	}
+
+	if (bDebugEnemy)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Enemy] Range check failed: Distance %.1f, Options %d"), TargetDistance, AttackOptions.Num());
+	}
+
+	return false;
+}
+
+bool AEnemyCharacter::CanAttack() const
+{
+	if (bIsDead || bIsCarryForwardActive)
+	{
+		return false;
+	}
+
+	const UCombatComponent* CombatComp = GetCombatComponent();
+	if (!CombatComp)
+	{
+		return false;
+	}
+
+	const FName ChosenAttackId = ChooseAttackId();
+	if (ChosenAttackId.IsNone())
+	{
+		return false;
+	}
+
+	const bool bCanStartAttack = CombatComp->CanStartAttackById(ChosenAttackId);
+
+	if (bDebugEnemy)
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[Enemy] CanAttack candidate: %s, CanStart: %s"),
+			*ChosenAttackId.ToString(),
+			bCanStartAttack ? TEXT("true") : TEXT("false")
+		);
+	}
+
+	return bCanStartAttack;
+}
+
+bool AEnemyCharacter::IsAttackOptionInRange(const FEnemyAttackOption& AttackOption,float TargetDistance) const
+{
+	return TargetDistance >= AttackOption.MinRange && TargetDistance <= AttackOption.MaxRange;
+}
+
+float AEnemyCharacter::ScoreAttackOption(const FEnemyAttackOption& AttackOption, float TargetDistance) const
+{
+	const float IdealRange = (AttackOption.MinRange + AttackOption.MaxRange) * 0.5f;
+	return FMath::Abs(TargetDistance - IdealRange);
+}
+
+FName AEnemyCharacter::ChooseAttackId() const
+{
+	const UCombatComponent* CombatComp = GetCombatComponent();
+	if (!CombatComp)
+	{
+		return NAME_None;
+	}
+
+	if (!IsTargetValid())
+	{
+		return NAME_None;
+	}
+
+	const float TargetDistance = DistanceToTarget2D();
+
+	TArray<TPair<FName, float>> ScoredAttacks;
+
+	for (const FEnemyAttackOption& AttackOption : AttackOptions)
+	{
+		if (AttackOption.AttackId.IsNone())
+		{
+			continue;
+		}
+
+		if (!IsAttackOptionInRange(AttackOption, TargetDistance))
+		{
+			continue;
+		}
+
+		if (!CombatComp->HasAttackById(AttackOption.AttackId))
+		{
+			continue;
+		}
+
+		const float Score = ScoreAttackOption(AttackOption, TargetDistance);
+
+		ScoredAttacks.Add({ AttackOption.AttackId, Score });
+
+		if (bDebugEnemy)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Enemy] Score: %s -> %.1f"), *AttackOption.AttackId.ToString(), Score);
+		}
+	}
+
+	ScoredAttacks.Sort([](const TPair<FName, float>& A, const TPair<FName, float>& B)
+	{
+		return A.Value < B.Value; // mniejszy score = lepszy
+	});
+	
+	const int32 TopCount = FMath::Min(2, ScoredAttacks.Num()); // top 2
+	if (TopCount == 0)
+	{
+		return NAME_None;
+	}
+
+	const int32 RandomIndex = FMath::RandRange(0, TopCount - 1);
+
+	const FName ChosenAttack = ScoredAttacks[RandomIndex].Key;
+	const float ChosenScore = ScoredAttacks[RandomIndex].Value;
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("[Enemy] Chosen (soft): %s, Score: %.1f"),
+		*ChosenAttack.ToString(),
+		ChosenScore
+	);
+
+	return ChosenAttack;
+}
+
+bool AEnemyCharacter::TryAttackFromAI()
+{
+	float IgnoredDuration = 0.f;
+	return TryAttackFromAI(IgnoredDuration);
 }

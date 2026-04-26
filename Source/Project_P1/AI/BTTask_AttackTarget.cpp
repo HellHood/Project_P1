@@ -1,12 +1,18 @@
 #include "BTTask_AttackTarget.h"
 
-#include "../AI/EnemyAIController.h"
-#include "../Characters/EnemyCharacter.h"
+#include "AIController.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
+#include "../Characters/EnemyCharacter.h"
 
 UBTTask_AttackTarget::UBTTask_AttackTarget()
 {
 	NodeName = TEXT("Attack Target");
+	bNotifyTaskFinished = true;
+}
+
+uint16 UBTTask_AttackTarget::GetInstanceMemorySize() const
+{
+	return sizeof(FBTTask_AttackTargetMemory);
 }
 
 EBTNodeResult::Type UBTTask_AttackTarget::ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory)
@@ -14,25 +20,67 @@ EBTNodeResult::Type UBTTask_AttackTarget::ExecuteTask(UBehaviorTreeComponent& Ow
 	AAIController* AIController = OwnerComp.GetAIOwner();
 	if (!AIController)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[BTTask_AttackTarget] Failed: missing AIController"));
 		return EBTNodeResult::Failed;
 	}
 
 	AEnemyCharacter* EnemyCharacter = Cast<AEnemyCharacter>(AIController->GetPawn());
 	if (!EnemyCharacter)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[BTTask_AttackTarget] Failed: controlled pawn is not EnemyCharacter"));
 		return EBTNodeResult::Failed;
 	}
 
-	const bool bAttackStarted = EnemyCharacter->TryAttackFromAI();
+	float AttackDuration = 0.f;
+	const bool bAttackStarted = EnemyCharacter->TryAttackFromAI(AttackDuration);
+	if (!bAttackStarted)
+	{
+		return EBTNodeResult::Failed;
+	}
 
-	UE_LOG(
-		LogTemp,
-		Warning,
-		TEXT("[BTTask_AttackTarget] Result: %s"),
-		bAttackStarted ? TEXT("Succeeded") : TEXT("Failed")
+	if (AttackDuration <= 0.f)
+	{
+		return EBTNodeResult::Succeeded;
+	}
+
+	FBTTask_AttackTargetMemory* TaskMemory = reinterpret_cast<FBTTask_AttackTargetMemory*>(NodeMemory);
+	if (!TaskMemory)
+	{
+		return EBTNodeResult::Failed;
+	}
+
+	UWorld* World = OwnerComp.GetWorld();
+	if (!World)
+	{
+		return EBTNodeResult::Failed;
+	}
+
+	// Keep BT inside attack task until the attack's authored duration has elapsed.
+	World->GetTimerManager().SetTimer(
+		TaskMemory->TimerHandle,
+		FTimerDelegate::CreateWeakLambda(&OwnerComp, [&OwnerComp, this]()
+		{
+			FinishLatentTask(OwnerComp, EBTNodeResult::Succeeded);
+		}),
+		AttackDuration,
+		false
 	);
 
-	return bAttackStarted ? EBTNodeResult::Succeeded : EBTNodeResult::Failed;
+	return EBTNodeResult::InProgress;
+}
+
+void UBTTask_AttackTarget::OnTaskFinished(
+	UBehaviorTreeComponent& OwnerComp,
+	uint8* NodeMemory,
+	EBTNodeResult::Type TaskResult
+)
+{
+	FBTTask_AttackTargetMemory* TaskMemory = reinterpret_cast<FBTTask_AttackTargetMemory*>(NodeMemory);
+	if (!TaskMemory)
+	{
+		return;
+	}
+
+	if (UWorld* World = OwnerComp.GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(TaskMemory->TimerHandle);
+	}
 }
