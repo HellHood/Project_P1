@@ -15,7 +15,7 @@ public:
 	void SetHealthPercent(float HealthPercent);
 
 	UFUNCTION(BlueprintImplementableEvent, Category="HUD")
-	void SetStyleDisplay(float NewStyle, EStyleRank NewRank, float NormalizedStyle);
+	void SetStyleDisplay(float NewStyle, const FText& RankText, float NormalizedStyle);
 
 protected:
 	virtual void NativeConstruct() override;

@@ -24,11 +24,16 @@ void UPlayerHUDWidget::NativeConstruct()
 
 	SetStyleDisplay(
 		BoundStyleComponent->GetStyle(),
-		BoundStyleComponent->GetCurrentRank(),
+		UStyleComponent::GetRankAsText(BoundStyleComponent->GetCurrentRank()),
 		BoundStyleComponent->GetNormalizedStyle()
 	);
 
 	UE_LOG(LogTemp, Warning, TEXT("[HUD] Style bound"));
+}
+
+void UPlayerHUDWidget::HandleStyleChanged(float NewStyle, EStyleRank NewRank, float NormalizedStyle)
+{
+	SetStyleDisplay(NewStyle, UStyleComponent::GetRankAsText(NewRank), NormalizedStyle);
 }
 
 void UPlayerHUDWidget::NativeDestruct()
@@ -42,7 +47,3 @@ void UPlayerHUDWidget::NativeDestruct()
 	Super::NativeDestruct();
 }
 
-void UPlayerHUDWidget::HandleStyleChanged(float NewStyle, EStyleRank NewRank, float NormalizedStyle)
-{
-	SetStyleDisplay(NewStyle, NewRank, NormalizedStyle);
-}

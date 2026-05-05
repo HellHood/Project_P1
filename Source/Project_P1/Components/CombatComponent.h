@@ -45,6 +45,7 @@ struct FAttackTransition
 	// Attack ID to start if this transition is accepted.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Attack")
 	FName NextAttackId = NAME_None;
+
 };
 
 USTRUCT(BlueprintType)
@@ -122,6 +123,12 @@ struct FAttackData
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Style")
 	float BaseStyleValue = 10.0f;
+		
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Progression")
+	bool bRequiresWeaponMastery = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Progression", meta=(EditCondition="bRequiresWeaponMastery"))
+	int32 RequiredWeaponLevel = 1;
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAttackStartedSignature, FAttackData, AttackData);
@@ -221,4 +228,5 @@ private:
 	bool ResolveDefaultAttackData(EAttackInputType InputType, FAttackData& OutAttackData) const;
 	bool ResolveTransitionAttack(EAttackInputType InputType, float InputTime, FAttackData& OutAttackData) const;
 	bool ResolveAttackById(FName AttackId, FAttackData& OutAttackData) const;
+	bool IsAttackUnlocked(const FAttackData& AttackData) const;
 };

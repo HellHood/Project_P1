@@ -18,6 +18,7 @@ class UStaticMeshComponent;
 class UUserWidget;
 class UStyleComponent;
 class UWeaponDataAsset;
+class UWeaponMasteryComponent;
 
 UCLASS()
 class PROJECT_P1_API APlayerCharacter : public ABaseCharacter
@@ -30,12 +31,18 @@ public:
 	UFUNCTION(BlueprintPure, Category="Components")
 	UStyleComponent* GetStyleComponent() const { return StyleComponent; }
 	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+	UWeaponMasteryComponent* WeaponMasteryComponent;
+	
 	UFUNCTION(BlueprintCallable, Category="Weapon")
 	void EquipWeaponByIndex(int32 NewIndex);
 
 	UFUNCTION(BlueprintCallable, Category="Weapon")
 	void NextWeapon();
-
+	
+	UFUNCTION(Exec)
+	void AddWeaponXP(float XPAmount);
+	
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
@@ -52,6 +59,8 @@ protected:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
 	UStyleComponent* StyleComponent = nullptr;
+	
+	
 	
 	UPROPERTY(EditDefaultsOnly, Category="Targeting")
 	float LockOnRotationSpeed = 12.0f;
@@ -104,6 +113,8 @@ protected:
 
 	UPROPERTY()
 	UUserWidget* PlayerHUDWidget = nullptr;
+	
+	
 
 	UPROPERTY(EditDefaultsOnly, Category="Dash")
 	float DashSpeed = 1800.0f;

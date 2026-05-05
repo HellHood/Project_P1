@@ -9,6 +9,8 @@ class AEnemyCharacter;
 class UPrimitiveComponent;
 class USceneComponent;
 class UHealthComponent;
+class UStyleComponent;
+class UWeaponMasteryComponent;
 
 USTRUCT(BlueprintType)
 struct FEncounterSpawnEntry
@@ -76,4 +78,5 @@ protected:
 	void EnableEncounterBarriers();
 	void DisableEncounterBarriers();
 	void CheckEncounterCleared();
+	void AwardEncounterRewards();
 };

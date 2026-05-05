@@ -5,8 +5,14 @@ UStyleComponent::UStyleComponent()
 	PrimaryComponentTick.bCanEverTick = true;
 }
 
-void UStyleComponent::RegisterAttackHit(FName AttackId, float BaseStyleValue)
+void UStyleComponent::RegisterAttackHit(FName WeaponId, FName AttackId, float BaseStyleValue)
 {
+	if (WeaponId.IsNone())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Style] RegisterAttackHit failed: WeaponId is None"));
+		return;
+	}
+
 	if (AttackId.IsNone())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[Style] RegisterAttackHit failed: AttackId is None"));
@@ -26,7 +32,9 @@ void UStyleComponent::RegisterAttackHit(FName AttackId, float BaseStyleValue)
 
 	CurrentStyle = FMath::Clamp(CurrentStyle + StyleToAdd, 0.0f, MaxStyle);
 	TimeSinceLastStyleGain = 0.0f;
-	
+
+	WeaponHitCounts.FindOrAdd(WeaponId)++;
+
 	PushAttackToHistory(AttackId);
 
 	OnStyleChanged.Broadcast(
@@ -38,15 +46,12 @@ void UStyleComponent::RegisterAttackHit(FName AttackId, float BaseStyleValue)
 	UE_LOG(
 		LogTemp,
 		Warning,
-		TEXT("[Style] Attack=%s Repeats=%d RepeatMultiplier=%.2f RankMultiplier=%.2f Added=%.2f CurrentStyle=%.2f Rank=%d Normalized=%.2f"),
+		TEXT("[Style] Weapon=%s Attack=%s Repeats=%d Added=%.2f CurrentStyle=%.2f"),
+		*WeaponId.ToString(),
 		*AttackId.ToString(),
 		RepeatCount,
-		RepeatMultiplier,
-		RankGainMultiplier,
 		StyleToAdd,
-		CurrentStyle,
-		static_cast<int32>(GetCurrentRank()),
-		GetNormalizedStyle()
+		CurrentStyle
 	);
 }
 
@@ -298,4 +303,50 @@ float UStyleComponent::GetRankDecayMultiplier() const
 	default:
 		return 1.0f;
 	}
+}
+
+FText UStyleComponent::GetRankAsText(EStyleRank Rank)
+{
+	switch (Rank)
+	{
+	case EStyleRank::D:
+		return FText::FromName(TEXT("D"));
+
+	case EStyleRank::C:
+		return FText::FromName(TEXT("C"));
+
+	case EStyleRank::B:
+		return FText::FromName(TEXT("B"));
+
+	case EStyleRank::A:
+		return FText::FromName(TEXT("A"));
+
+	case EStyleRank::S:
+		return FText::FromName(TEXT("S"));
+
+	case EStyleRank::SS:
+		return FText::FromName(TEXT("SS"));
+
+	case EStyleRank::SSS:
+		return FText::FromName(TEXT("SSS"));
+
+	default:
+		return FText::FromName(TEXT("?"));
+	}
+}
+
+void UStyleComponent::ResetStyle()
+{
+	CurrentStyle = 0.0f;
+	TimeSinceLastStyleGain = 0.0f;
+	RecentAttackHistory.Empty();
+	WeaponHitCounts.Empty();
+
+	OnStyleChanged.Broadcast(
+		CurrentStyle,
+		GetCurrentRank(),
+		GetNormalizedStyle()
+	);
+
+	UE_LOG(LogTemp, Warning, TEXT("[Style] Reset"));
 }

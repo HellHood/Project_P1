@@ -13,6 +13,7 @@
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
+#include "WeaponMasteryComponent.h"
 
 static const ECollisionChannel MeleeChannel = ECC_GameTraceChannel1;
 
@@ -58,6 +59,12 @@ bool UCombatComponent::RequestAttack(EAttackInputType InputType)
 		return false;
 	}
 
+	if (!IsAttackUnlocked(AttackData))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack locked: %s"), *AttackData.AttackId.ToString());
+		return false;
+	}
+
 	UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack started: %s"), *AttackData.AttackId.ToString());
 
 	BeginAttack(AttackData);
@@ -81,6 +88,12 @@ bool UCombatComponent::RequestAttackById(FName AttackId)
 	if (!ResolveAttackById(AttackId, AttackData))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack by id failed: %s"), *AttackId.ToString());
+		return false;
+	}
+
+	if (!IsAttackUnlocked(AttackData))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack by id locked: %s"), *AttackData.AttackId.ToString());
 		return false;
 	}
 
@@ -272,7 +285,15 @@ void UCombatComponent::ProcessHitWindowTick()
 	{
 		if (UStyleComponent* StyleComp = OwnerActor->FindComponentByClass<UStyleComponent>())
 		{
+			FName WeaponId = NAME_None;
+
+			if (const UWeaponMasteryComponent* MasteryComponent = OwnerActor->FindComponentByClass<UWeaponMasteryComponent>())
+			{
+				WeaponId = MasteryComponent->GetActiveWeaponId();
+			}
+
 			StyleComp->RegisterAttackHit(
+				WeaponId,
 				CurrentAttackData.AttackId,
 				CurrentAttackData.BaseStyleValue
 			);
@@ -394,6 +415,12 @@ void UCombatComponent::EndAttack()
 	FAttackData NextAttackData;
 	if (ResolveTransitionAttack(NextInputType, InputTime, NextAttackData))
 	{
+		if (!IsAttackUnlocked(NextAttackData))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Combat] Transition locked: %s"), *NextAttackData.AttackId.ToString());
+			return;
+		}
+
 		UE_LOG(LogTemp, Warning, TEXT("[Combat] Transition accepted: %s"), *NextAttackData.AttackId.ToString());
 		BeginAttack(NextAttackData);
 		return;
@@ -528,7 +555,12 @@ bool UCombatComponent::CanStartAttackById(FName AttackId) const
 	}
 
 	FAttackData AttackData;
-	return ResolveAttackById(AttackId, AttackData);
+	if (!ResolveAttackById(AttackId, AttackData))
+	{
+		return false;
+	}
+
+	return IsAttackUnlocked(AttackData);
 }
 
 bool UCombatComponent::HasAttackById(FName AttackId) const
@@ -563,4 +595,31 @@ bool UCombatComponent::HasAttackById(FName AttackId) const
 bool UCombatComponent::GetAttackDataById(FName AttackId, FAttackData& OutAttackData) const
 {
 	return ResolveAttackById(AttackId, OutAttackData);
+}
+
+bool UCombatComponent::IsAttackUnlocked(const FAttackData& AttackData) const
+{
+	if (!AttackData.bRequiresWeaponMastery)
+	{
+		return true;
+	}
+
+	const AActor* OwnerActor = GetOwner();
+	if (!OwnerActor)
+	{
+		return false;
+	}
+
+	const UWeaponMasteryComponent* MasteryComponent = OwnerActor->FindComponentByClass<UWeaponMasteryComponent>();
+	if (!MasteryComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Combat] Attack locked: no WeaponMasteryComponent on %s"), *GetNameSafe(OwnerActor));
+		return false;
+	}
+
+	return MasteryComponent->IsAttackUnlocked(
+		MasteryComponent->GetActiveWeaponId(),
+		AttackData.bRequiresWeaponMastery,
+		AttackData.RequiredWeaponLevel
+	);
 }

@@ -6,6 +6,10 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/SceneComponent.h"
 #include "Engine/World.h"
+#include "../Characters/PlayerCharacter.h"
+#include "../Components/StyleComponent.h"
+#include "../Components/WeaponMasteryComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 AEncounterRoom::AEncounterRoom()
 {
@@ -248,10 +252,86 @@ void AEncounterRoom::CheckEncounterCleared()
 	}
 
 	bEncounterCleared = true;
+
+	AwardEncounterRewards();
 	DisableEncounterBarriers();
 
 	if (bDebugEncounter)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[Encounter] Cleared: %s"), *GetName());
 	}
+}
+
+void AEncounterRoom::AwardEncounterRewards()
+{
+	APlayerCharacter* PlayerCharacter = Cast<APlayerCharacter>(
+		UGameplayStatics::GetPlayerCharacter(this, 0)
+	);
+
+	if (!PlayerCharacter)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Encounter] Reward skipped: player not found"));
+		return;
+	}
+
+	UStyleComponent* StyleComponent = PlayerCharacter->FindComponentByClass<UStyleComponent>();
+	UWeaponMasteryComponent* MasteryComponent = PlayerCharacter->FindComponentByClass<UWeaponMasteryComponent>();
+
+	if (!StyleComponent || !MasteryComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Encounter] Reward skipped: missing Style or Mastery component"));
+		return;
+	}
+
+	const float FinalStyle = StyleComponent->GetStyle();
+	const float TotalWeaponXP = FinalStyle * 0.1f;
+	const TMap<FName, int32>& WeaponHitCounts = StyleComponent->GetWeaponHitCounts();
+
+	int32 TotalWeaponHits = 0;
+	for (const TPair<FName, int32>& WeaponHitPair : WeaponHitCounts)
+	{
+		TotalWeaponHits += WeaponHitPair.Value;
+	}
+
+	if (FinalStyle <= 0.0f || TotalWeaponXP <= 0.0f || TotalWeaponHits <= 0)
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[Encounter] Reward skipped: FinalStyle=%.1f TotalHits=%d"),
+			FinalStyle,
+			TotalWeaponHits
+		);
+
+		StyleComponent->ResetStyle();
+		return;
+	}
+
+	for (const TPair<FName, int32>& WeaponHitPair : WeaponHitCounts)
+	{
+		const FName WeaponId = WeaponHitPair.Key;
+		const int32 HitCount = WeaponHitPair.Value;
+
+		if (WeaponId.IsNone() || HitCount <= 0)
+		{
+			continue;
+		}
+
+		const float WeaponRatio = static_cast<float>(HitCount) / static_cast<float>(TotalWeaponHits);
+		const float WeaponXP = TotalWeaponXP * WeaponRatio;
+
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("[Encounter] Weapon reward: Weapon=%s Hits=%d Ratio=%.2f XP=%.1f"),
+			*WeaponId.ToString(),
+			HitCount,
+			WeaponRatio,
+			WeaponXP
+		);
+
+		MasteryComponent->AddWeaponXP(WeaponId, WeaponXP);
+	}
+
+	StyleComponent->ResetStyle();
 }

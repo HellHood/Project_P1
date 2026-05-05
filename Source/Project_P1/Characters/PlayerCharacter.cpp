@@ -22,6 +22,7 @@
 #include "../Components/StyleComponent.h"
 #include "../Data/WeaponDataAsset.h"
 #include "../Data/AttackSetDataAsset.h"
+#include "../Components/WeaponMasteryComponent.h"
 
 static int32 GMovementDebug = 0;
 static FAutoConsoleVariableRef CVarMovementDebug(
@@ -53,6 +54,7 @@ APlayerCharacter::APlayerCharacter()
 
 	TargetingComponent = CreateDefaultSubobject<UTargetingComponent>(TEXT("TargetingComponent"));
 	StyleComponent = CreateDefaultSubobject<UStyleComponent>(TEXT("StyleComponent"));
+	WeaponMasteryComponent = CreateDefaultSubobject<UWeaponMasteryComponent>(TEXT("WeaponMasteryComponent"));
 	
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
@@ -85,7 +87,9 @@ APlayerCharacter::APlayerCharacter()
 void APlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-
+	
+	UE_LOG(LogTemp, Warning, TEXT("[Test] ActiveWeaponId: %s"), *WeaponMasteryComponent->GetActiveWeaponId().ToString());
+	
 	if (GetMesh())
 	{
 		const bool bHasSocket = GetMesh()->DoesSocketExist(WeaponSocketName);
@@ -757,6 +761,11 @@ void APlayerCharacter::EquipWeaponByIndex(int32 NewIndex)
 		TEXT("[Weapon] Equipped: %s"),
 		CurrentWeaponData->WeaponId.IsNone() ? TEXT("UnnamedWeapon") : *CurrentWeaponData->WeaponId.ToString()
 	);
+	
+	if (WeaponMasteryComponent && CurrentWeaponData)
+	{
+		WeaponMasteryComponent->SetActiveWeapon(CurrentWeaponData->WeaponId);
+	}
 }
 
 void APlayerCharacter::NextWeapon()
@@ -778,4 +787,16 @@ void APlayerCharacter::NextWeapon()
 void APlayerCharacter::OnNextWeaponPressed()
 {
 	NextWeapon();
+}
+
+void APlayerCharacter::AddWeaponXP(float XPAmount)
+{
+	if (!WeaponMasteryComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Player] AddWeaponXP failed: WeaponMasteryComponent is null"));
+		return;
+	}
+
+	const FName WeaponId = WeaponMasteryComponent->GetActiveWeaponId();
+	WeaponMasteryComponent->AddWeaponXP(WeaponId, XPAmount);
 }

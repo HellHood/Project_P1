@@ -41,10 +41,19 @@ public:
 	float GetNormalizedStyle() const;
 
 	UFUNCTION(BlueprintCallable, Category="Style")
-	void RegisterAttackHit(FName AttackId, float BaseStyleValue);
+	void RegisterAttackHit(FName WeaponId, FName AttackId, float BaseStyleValue);
 
 	UPROPERTY(BlueprintAssignable, Category="Style")
 	FOnStyleChanged OnStyleChanged;
+	
+	UFUNCTION(BlueprintPure, Category="Style")
+	static FText GetRankAsText(EStyleRank Rank);
+	
+	UFUNCTION(BlueprintPure, Category="Style")
+	const TMap<FName, int32>& GetWeaponHitCounts() const { return WeaponHitCounts; }
+
+	UFUNCTION(BlueprintCallable, Category="Style")
+	void ResetStyle();
 
 protected:
 	UPROPERTY(EditDefaultsOnly, Category="Style")
@@ -97,6 +106,9 @@ protected:
 
 	UPROPERTY(VisibleInstanceOnly, Category="Style|Decay")
 	float TimeSinceLastStyleGain = 0.0f;
+	
+	UPROPERTY(VisibleInstanceOnly, Category="Style")
+	TMap<FName, int32> WeaponHitCounts;
 	
 private:
 	int32 CountRecentRepeats(FName AttackId) const;
